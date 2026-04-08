@@ -1,12 +1,28 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
-import { Shuffle, ArrowDownAZ, RotateCcw, Save, FolderOpen, Trash2, X } from "lucide-react";
+import {
+  Shuffle,
+  ArrowDownAZ,
+  RotateCcw,
+  Save,
+  FolderOpen,
+  Trash2,
+  X,
+  Award,
+  Loader2,
+  ChevronDown,
+} from "lucide-react";
 import toast from "react-hot-toast";
 import Wheel from "@/components/Wheel";
 import WinnerDialog from "@/components/WinnerDialog";
+import {
+  getOwnersForTokens,
+  resolveWalletNames,
+  truncateAddress,
+} from "@/lib/get-badge-holders";
 
 const DEFAULT_NAMES = [
   "Alice",
@@ -25,6 +41,19 @@ interface SavedList {
   name: string;
   entries: string[];
   savedAt: number;
+}
+
+interface BadgeDef {
+  id: string;
+  badgeId: string;
+  name: string;
+  description: string;
+  image: string;
+}
+
+interface BadgeTokenMap {
+  badgeToTokens: Record<string, string[]>;
+  tokenToBadges: Record<string, string[]>;
 }
 
 function loadSavedLists(): SavedList[] {
@@ -51,6 +80,29 @@ export default function Home() {
   const [saveName, setSaveName] = useState("");
   const [activeListName, setActiveListName] = useState<string | null>(null);
 
+  // Badge state
+  const [badges, setBadges] = useState<BadgeDef[]>([]);
+  const [badgeMap, setBadgeMap] = useState<BadgeTokenMap | null>(null);
+  const [selectedBadge, setSelectedBadge] = useState<string | null>(null);
+  const [badgeDropdownOpen, setBadgeDropdownOpen] = useState(false);
+  const [badgeSearch, setBadgeSearch] = useState("");
+  const [loadingBadge, setLoadingBadge] = useState(false);
+
+  // Load badge data on mount
+  useEffect(() => {
+    Promise.all([
+      fetch("/badge-definitions.json").then((r) => r.json()),
+      fetch("/badge_token_map.json").then((r) => r.json()),
+    ]).then(([defs, map]: [BadgeDef[], BadgeTokenMap]) => {
+      // Only include badges that have token mappings
+      const withTokens = defs.filter(
+        (b) => map.badgeToTokens[b.id] && map.badgeToTokens[b.id].length > 0
+      );
+      setBadges(withTokens);
+      setBadgeMap(map);
+    });
+  }, []);
+
   // Load saved lists on mount
   useEffect(() => {
     setSavedLists(loadSavedLists());
@@ -60,6 +112,16 @@ export default function Home() {
     .split("\n")
     .map((s) => s.trim())
     .filter(Boolean);
+
+  // Filtered badges for search
+  const filteredBadges = useMemo(() => {
+    if (!badgeSearch.trim()) return badges;
+    const q = badgeSearch.toLowerCase();
+    return badges.filter(
+      (b) =>
+        b.name.toLowerCase().includes(q) || b.id.toLowerCase().includes(q)
+    );
+  }, [badges, badgeSearch]);
 
   const handleSpinStart = useCallback(() => setIsSpinning(true), []);
 
@@ -105,6 +167,60 @@ export default function Home() {
   const reset = () => {
     setText(DEFAULT_NAMES.join("\n"));
     setActiveListName(null);
+    setSelectedBadge(null);
+  };
+
+  // Badge selection handler
+  const handleBadgeSelect = async (badgeId: string) => {
+    if (!badgeMap) return;
+
+    const badge = badges.find((b) => b.id === badgeId);
+    const tokenIds = badgeMap.badgeToTokens[badgeId];
+    if (!tokenIds || tokenIds.length === 0) {
+      toast.error("No tokens found for this badge");
+      return;
+    }
+
+    setSelectedBadge(badgeId);
+    setBadgeDropdownOpen(false);
+    setBadgeSearch("");
+    setLoadingBadge(true);
+    setActiveListName(badge?.name || badgeId);
+
+    try {
+      toast.loading(`Fetching ${tokenIds.length} token owners on-chain...`, {
+        id: "badge-load",
+      });
+
+      // Get unique owners via multicall
+      const ownerMap = await getOwnersForTokens(tokenIds);
+      const addresses = Array.from(ownerMap.keys());
+
+      // Show truncated addresses immediately
+      setText(addresses.map(truncateAddress).join("\n"));
+      toast.loading(
+        `Found ${addresses.length} holders. Resolving names...`,
+        { id: "badge-load" }
+      );
+
+      // Resolve ENS/Twitter names in background
+      const names = await resolveWalletNames(addresses);
+      setText(
+        addresses
+          .map((addr) => names.get(addr) || truncateAddress(addr))
+          .join("\n")
+      );
+
+      toast.success(
+        `Loaded ${addresses.length} holders for "${badge?.name}"`,
+        { id: "badge-load" }
+      );
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to fetch holders", { id: "badge-load" });
+    } finally {
+      setLoadingBadge(false);
+    }
   };
 
   // Save list
@@ -130,6 +246,7 @@ export default function Home() {
   const handleLoad = (list: SavedList) => {
     setText(list.entries.join("\n"));
     setActiveListName(list.name);
+    setSelectedBadge(null);
     setShowLoadPanel(false);
     toast.success(`Loaded "${list.name}"`);
   };
@@ -142,6 +259,25 @@ export default function Home() {
     if (activeListName === name) setActiveListName(null);
     toast.success(`Deleted "${name}"`);
   };
+
+  const selectedBadgeDef = badges.find((b) => b.id === selectedBadge);
+  const badgeDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close badge dropdown on outside click
+  useEffect(() => {
+    if (!badgeDropdownOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (
+        badgeDropdownRef.current &&
+        !badgeDropdownRef.current.contains(e.target as Node)
+      ) {
+        setBadgeDropdownOpen(false);
+        setBadgeSearch("");
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [badgeDropdownOpen]);
 
   return (
     <main className="min-h-screen relative overflow-hidden">
@@ -193,12 +329,14 @@ export default function Home() {
               entries={entries}
               onSpinEnd={handleSpinEnd}
               onSpinStart={handleSpinStart}
-              disabled={isSpinning}
+              disabled={isSpinning || loadingBadge}
             />
             <p className="mt-3 text-white/25 font-body text-xs">
-              {entries.length >= 2
-                ? "Click the wheel to spin"
-                : "Add at least 2 names to spin"}
+              {loadingBadge
+                ? "Loading badge holders..."
+                : entries.length >= 2
+                  ? "Click the wheel to spin"
+                  : "Add at least 2 names to spin"}
             </p>
           </motion.div>
 
@@ -209,6 +347,122 @@ export default function Home() {
             transition={{ delay: 0.1 }}
             className="space-y-4"
           >
+            {/* Badge selector */}
+            <div className="bg-[#121212] border border-[#FFE048]/20 rounded-2xl p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <Award size={16} className="text-[#FFE048]" />
+                <h3 className="font-display font-bold text-white text-sm uppercase">
+                  Badge Raffle
+                </h3>
+              </div>
+              <p className="text-white/30 font-body text-xs mb-3">
+                Select a badge to populate the wheel with all holder wallets
+              </p>
+
+              {/* Badge dropdown */}
+              <div className="relative" ref={badgeDropdownRef}>
+                <button
+                  onClick={() =>
+                    !loadingBadge && setBadgeDropdownOpen(!badgeDropdownOpen)
+                  }
+                  disabled={loadingBadge || badges.length === 0}
+                  className="w-full flex items-center gap-3 px-3 py-3 rounded-xl bg-black/40 border border-white/[0.08] hover:border-[#FFE048]/20 transition-all disabled:opacity-40 text-left"
+                >
+                  {loadingBadge ? (
+                    <Loader2 size={16} className="text-[#FFE048] animate-spin" />
+                  ) : selectedBadgeDef ? (
+                    <img
+                      src={selectedBadgeDef.image}
+                      alt=""
+                      className="w-6 h-6 rounded"
+                    />
+                  ) : (
+                    <div className="w-6 h-6 rounded bg-white/[0.06]" />
+                  )}
+                  <span
+                    className={`flex-1 font-body text-sm truncate ${
+                      selectedBadgeDef ? "text-white" : "text-white/30"
+                    }`}
+                  >
+                    {loadingBadge
+                      ? "Loading holders..."
+                      : selectedBadgeDef
+                        ? selectedBadgeDef.name
+                        : "Choose a badge..."}
+                  </span>
+                  <ChevronDown
+                    size={14}
+                    className={`text-white/30 transition-transform ${
+                      badgeDropdownOpen ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
+
+                {/* Dropdown panel */}
+                <AnimatePresence>
+                  {badgeDropdownOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      transition={{ duration: 0.12 }}
+                      className="absolute z-30 top-full mt-1 left-0 right-0 bg-[#1a1a1a] border border-white/[0.1] rounded-xl overflow-hidden shadow-2xl"
+                    >
+                      {/* Search */}
+                      <div className="p-2 border-b border-white/[0.06]">
+                        <input
+                          type="text"
+                          value={badgeSearch}
+                          onChange={(e) => setBadgeSearch(e.target.value)}
+                          placeholder="Search badges..."
+                          autoFocus
+                          className="w-full bg-black/40 border border-white/[0.08] rounded-lg px-3 py-2 text-white font-body text-xs focus:outline-none focus:border-[#FFE048]/30 placeholder:text-white/20"
+                        />
+                      </div>
+                      {/* Badge list */}
+                      <div className="max-h-64 overflow-y-auto">
+                        {filteredBadges.length === 0 ? (
+                          <p className="text-white/30 font-body text-xs p-4 text-center">
+                            No badges found
+                          </p>
+                        ) : (
+                          filteredBadges.map((badge) => {
+                            const tokenCount =
+                              badgeMap?.badgeToTokens[badge.id]?.length || 0;
+                            return (
+                              <button
+                                key={badge.id}
+                                onClick={() => handleBadgeSelect(badge.id)}
+                                className={`w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/[0.04] transition-colors text-left ${
+                                  selectedBadge === badge.id
+                                    ? "bg-[#FFE048]/5"
+                                    : ""
+                                }`}
+                              >
+                                <img
+                                  src={badge.image}
+                                  alt=""
+                                  className="w-7 h-7 rounded flex-shrink-0"
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-white font-body text-xs truncate">
+                                    {badge.name}
+                                  </p>
+                                  <p className="text-white/25 font-body text-[10px]">
+                                    {tokenCount} tokens
+                                  </p>
+                                </div>
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
+
             {/* Entries panel */}
             <div className="bg-[#121212] border border-white/[0.08] rounded-2xl p-5">
               {/* Header row */}
@@ -233,9 +487,9 @@ export default function Home() {
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 placeholder={"Enter names, one per line\u2026"}
-                disabled={isSpinning}
+                disabled={isSpinning || loadingBadge}
                 spellCheck={false}
-                className="w-full h-64 bg-black/40 border border-white/[0.08] rounded-xl p-4 text-white font-body text-sm leading-relaxed resize-none focus:outline-none focus:border-[#FFE048]/30 transition-colors placeholder:text-white/20 disabled:opacity-40"
+                className="w-full h-52 bg-black/40 border border-white/[0.08] rounded-xl p-4 text-white font-body text-sm leading-relaxed resize-none focus:outline-none focus:border-[#FFE048]/30 transition-colors placeholder:text-white/20 disabled:opacity-40"
               />
 
               {/* Action buttons */}
@@ -384,7 +638,8 @@ export default function Home() {
 
               {savedLists.length === 0 && !showSaveInput && (
                 <p className="text-white/20 font-body text-xs">
-                  No saved lists yet. Save your current entries to reuse them later.
+                  No saved lists yet. Save your current entries to reuse them
+                  later.
                 </p>
               )}
             </div>

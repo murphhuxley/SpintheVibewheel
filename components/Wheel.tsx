@@ -21,8 +21,7 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled }: Pro
   const rotation = useRef(0);
   const velocity = useRef(0);
   const spinning = useRef(false);
-  const prevSeg = useRef(-1);
-  const audioCtx = useRef<AudioContext | null>(null);
+  const spinAudio = useRef<HTMLAudioElement | null>(null);
   const entriesRef = useRef(entries);
   const onSpinEndRef = useRef(onSpinEnd);
   const onSpinStartRef = useRef(onSpinStart);
@@ -31,47 +30,32 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled }: Pro
   onSpinEndRef.current = onSpinEnd;
   onSpinStartRef.current = onSpinStart;
 
-  const ensureAudio = useCallback(() => {
-    if (!audioCtx.current) {
-      audioCtx.current = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-    }
-    return audioCtx.current;
+  // Preload spin sound
+  useEffect(() => {
+    const audio = new Audio("/wheel-tick.mp3");
+    audio.preload = "auto";
+    spinAudio.current = audio;
   }, []);
 
-  const playTick = useCallback(() => {
+  const playSpinSound = useCallback(() => {
     try {
-      const ctx = ensureAudio();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = "sine";
-      osc.frequency.value = 580 + Math.random() * 240;
-      gain.gain.setValueAtTime(0.06, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.035);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.035);
+      const audio = spinAudio.current;
+      if (audio) {
+        audio.currentTime = 0;
+        audio.play();
+      }
     } catch { /* audio blocked */ }
-  }, [ensureAudio]);
+  }, []);
 
-  const playFanfare = useCallback(() => {
+  const stopSpinSound = useCallback(() => {
     try {
-      const ctx = ensureAudio();
-      [523, 659, 784, 1047].forEach((freq, i) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.type = "triangle";
-        osc.frequency.value = freq;
-        const t = ctx.currentTime + i * 0.1;
-        gain.gain.setValueAtTime(0.12, t);
-        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
-        osc.start(t);
-        osc.stop(t + 0.35);
-      });
+      const audio = spinAudio.current;
+      if (audio) {
+        audio.pause();
+        audio.currentTime = 0;
+      }
     } catch { /* audio blocked */ }
-  }, [ensureAudio]);
+  }, []);
 
   const getSegmentAt = useCallback((rot: number, count: number) => {
     if (count === 0) return -1;
@@ -220,18 +204,12 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled }: Pro
         rotation.current += velocity.current;
         velocity.current *= 0.9875;
 
-        const items = entriesRef.current;
-        const seg = getSegmentAt(rotation.current, items.length);
-        if (seg !== prevSeg.current && prevSeg.current !== -1) {
-          playTick();
-        }
-        prevSeg.current = seg;
-
         if (velocity.current < 0.002) {
           spinning.current = false;
           velocity.current = 0;
+          stopSpinSound();
+          const items = entriesRef.current;
           const winIdx = getSegmentAt(rotation.current, items.length);
-          playFanfare();
           setTimeout(() => {
             onSpinEndRef.current(items[winIdx], winIdx);
           }, 350);
@@ -244,13 +222,13 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled }: Pro
 
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [getSegmentAt, playTick, playFanfare]);
+  }, [getSegmentAt, stopSpinSound]);
 
   const handleClick = useCallback(() => {
     if (spinning.current || disabled || entriesRef.current.length < 2) return;
     velocity.current = 0.15 + Math.random() * 0.35;
     spinning.current = true;
-    prevSeg.current = getSegmentAt(rotation.current, entriesRef.current.length);
+    playSpinSound();
     onSpinStartRef.current?.();
   }, [disabled, getSegmentAt]);
 
