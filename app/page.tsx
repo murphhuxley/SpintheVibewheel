@@ -19,7 +19,8 @@ import toast from "react-hot-toast";
 import Wheel from "@/components/Wheel";
 import WinnerDialog from "@/components/WinnerDialog";
 import {
-  getOwnersForTokens,
+  getHoldersForBadge,
+  getBadgeStrategy,
   resolveWalletNames,
   truncateAddress,
 } from "@/lib/get-badge-holders";
@@ -41,6 +42,7 @@ interface SavedList {
   name: string;
   entries: string[];
   savedAt: number;
+  entryAddresses?: Array<string | null>;
 }
 
 interface BadgeDef {
@@ -56,10 +58,66 @@ interface BadgeTokenMap {
   tokenToBadges: Record<string, string[]>;
 }
 
+function parseEntries(value: string): string[] {
+  return value
+    .split("\n")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function alignEntryAddresses(
+  entryCount: number,
+  entryAddresses?: Array<string | null>
+): Array<string | null> {
+  return Array.from({ length: entryCount }, (_, index) => {
+    const address = entryAddresses?.[index];
+    return typeof address === "string" && address ? address : null;
+  });
+}
+
 function loadSavedLists(): SavedList[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    if (!raw) return [];
+
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed.flatMap((item) => {
+      if (!item || typeof item !== "object") return [];
+      const record = item as {
+        name?: unknown;
+        entries?: unknown;
+        savedAt?: unknown;
+        entryAddresses?: unknown;
+      };
+
+      const name = typeof record.name === "string" ? record.name.trim() : "";
+      const entries = Array.isArray(record.entries)
+        ? record.entries.filter(
+            (entry: unknown): entry is string => typeof entry === "string"
+          )
+        : [];
+
+      if (!name || entries.length === 0) return [];
+
+      return [
+        {
+          name,
+          entries,
+          savedAt:
+            typeof record.savedAt === "number" ? record.savedAt : Date.now(),
+          entryAddresses: alignEntryAddresses(
+            entries.length,
+            Array.isArray(record.entryAddresses)
+              ? record.entryAddresses.map((address: unknown) =>
+                  typeof address === "string" && address ? address : null
+                )
+              : undefined
+          ),
+        } satisfies SavedList,
+      ];
+    });
   } catch {
     return [];
   }
@@ -87,8 +145,10 @@ export default function Home() {
   const [badgeDropdownOpen, setBadgeDropdownOpen] = useState(false);
   const [badgeSearch, setBadgeSearch] = useState("");
   const [loadingBadge, setLoadingBadge] = useState(false);
-  // Map display name → full wallet address (for badge raffles)
-  const [addressMap, setAddressMap] = useState<Map<string, string>>(new Map());
+  const [entryAddresses, setEntryAddresses] = useState<Array<string | null>>(
+    () => alignEntryAddresses(DEFAULT_NAMES.length)
+  );
+  const badgeLoadRequestRef = useRef(0);
 
   // Load badge data on mount
   useEffect(() => {
@@ -96,11 +156,8 @@ export default function Home() {
       fetch("/badge-definitions.json").then((r) => r.json()),
       fetch("/badge_token_map.json").then((r) => r.json()),
     ]).then(([defs, map]: [BadgeDef[], BadgeTokenMap]) => {
-      // Only include badges that have token mappings
-      const withTokens = defs.filter(
-        (b) => map.badgeToTokens[b.id] && map.badgeToTokens[b.id].length > 0
-      );
-      setBadges(withTokens);
+      // Show all badges — strategy routing handles different types
+      setBadges(defs);
       setBadgeMap(map);
     });
   }, []);
@@ -110,10 +167,7 @@ export default function Home() {
     setSavedLists(loadSavedLists());
   }, []);
 
-  const entries = text
-    .split("\n")
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const entries = parseEntries(text);
 
   // Filtered badges for search
   const filteredBadges = useMemo(() => {
@@ -133,43 +187,85 @@ export default function Home() {
     setIsSpinning(false);
   }, []);
 
-  const handleClose = () => setWinner(null);
+  const invalidateBadgeLoad = useCallback(() => {
+    badgeLoadRequestRef.current += 1;
+    setLoadingBadge(false);
+    toast.dismiss("badge-load");
+  }, []);
+
+  const resetWinner = useCallback(() => {
+    setWinner(null);
+    setWinnerIdx(-1);
+  }, []);
+
+  const handleClose = resetWinner;
+
+  const setManualText = useCallback(
+    (value: string) => {
+      if (loadingBadge) {
+        invalidateBadgeLoad();
+      }
+
+      if (selectedBadge) {
+        setSelectedBadge(null);
+        setActiveListName(null);
+      }
+
+      resetWinner();
+      setEntryAddresses([]);
+      setText(value);
+    },
+    [invalidateBadgeLoad, loadingBadge, resetWinner, selectedBadge]
+  );
 
   const handleRemove = () => {
-    const lines = text
-      .split("\n")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    lines.splice(winnerIdx, 1);
-    setText(lines.join("\n"));
-    setWinner(null);
+    const nextEntries = [...entries];
+    const nextAddresses = alignEntryAddresses(entries.length, entryAddresses);
+
+    nextEntries.splice(winnerIdx, 1);
+    nextAddresses.splice(winnerIdx, 1);
+
+    setText(nextEntries.join("\n"));
+    setEntryAddresses(nextAddresses);
+    resetWinner();
   };
 
   const shuffle = () => {
-    const lines = text
-      .split("\n")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    for (let i = lines.length - 1; i > 0; i--) {
+    const pairs = entries.map((entry, index) => ({
+      entry,
+      address: entryAddresses[index] ?? null,
+    }));
+
+    for (let i = pairs.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [lines[i], lines[j]] = [lines[j], lines[i]];
+      [pairs[i], pairs[j]] = [pairs[j], pairs[i]];
     }
-    setText(lines.join("\n"));
+
+    setText(pairs.map(({ entry }) => entry).join("\n"));
+    setEntryAddresses(pairs.map(({ address }) => address));
   };
 
   const sort = () => {
-    const lines = text
-      .split("\n")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    lines.sort((a, b) => a.localeCompare(b));
-    setText(lines.join("\n"));
+    const pairs = entries.map((entry, index) => ({
+      entry,
+      address: entryAddresses[index] ?? null,
+    }));
+
+    pairs.sort((a, b) => a.entry.localeCompare(b.entry));
+
+    setText(pairs.map(({ entry }) => entry).join("\n"));
+    setEntryAddresses(pairs.map(({ address }) => address));
   };
 
   const reset = () => {
+    invalidateBadgeLoad();
+    resetWinner();
     setText(DEFAULT_NAMES.join("\n"));
+    setEntryAddresses(alignEntryAddresses(DEFAULT_NAMES.length));
     setActiveListName(null);
     setSelectedBadge(null);
+    setBadgeDropdownOpen(false);
+    setBadgeSearch("");
   };
 
   // Badge selection handler
@@ -177,9 +273,15 @@ export default function Home() {
     if (!badgeMap) return;
 
     const badge = badges.find((b) => b.id === badgeId);
-    const tokenIds = badgeMap.badgeToTokens[badgeId];
-    if (!tokenIds || tokenIds.length === 0) {
-      toast.error("No tokens found for this badge");
+    const strategy = getBadgeStrategy(badgeId, badgeMap.badgeToTokens);
+
+    // Unsupported strategies
+    if (strategy === "collector") {
+      toast.error("Collector milestone badges require per-wallet evaluation — not supported yet");
+      return;
+    }
+    if (strategy === "vibestr") {
+      toast.error("VIBESTR tier badges require ERC-20 balance scanning — coming soon");
       return;
     }
 
@@ -188,34 +290,39 @@ export default function Home() {
     setBadgeSearch("");
     setLoadingBadge(true);
     setActiveListName(badge?.name || badgeId);
+    resetWinner();
+
+    const requestId = badgeLoadRequestRef.current + 1;
+    badgeLoadRequestRef.current = requestId;
 
     try {
-      toast.loading(`Fetching ${tokenIds.length} token owners on-chain...`, {
-        id: "badge-load",
-      });
+      const label = strategy === "hkm_any" || strategy === "hkm_all"
+        ? "Scanning HighKey Moments contract..."
+        : strategy === "combo" || strategy === "multi_type"
+          ? "Computing combo badge holders..."
+          : "Fetching token owners on-chain...";
+      toast.loading(label, { id: "badge-load" });
 
-      // Get unique owners via multicall
-      const ownerMap = await getOwnersForTokens(tokenIds);
-      const addresses = Array.from(ownerMap.keys());
+      const addresses = await getHoldersForBadge(badgeId, badgeMap.badgeToTokens);
+      if (requestId !== badgeLoadRequestRef.current) return;
 
-      // Build display→address map and show truncated addresses immediately
-      const newMap = new Map<string, string>();
-      addresses.forEach((addr) => newMap.set(truncateAddress(addr), addr));
-      setAddressMap(newMap);
-      setText(addresses.map(truncateAddress).join("\n"));
+      if (addresses.length === 0) {
+        toast.error("No holders found for this badge", { id: "badge-load" });
+        setLoadingBadge(false);
+        return;
+      }
+
+      const truncatedEntries = addresses.map(truncateAddress);
+      setEntryAddresses(addresses);
+      setText(truncatedEntries.join("\n"));
       toast.loading(
         `Found ${addresses.length} holders. Resolving names...`,
         { id: "badge-load" }
       );
 
-      // Resolve ENS/Twitter names in background
       const names = await resolveWalletNames(addresses);
-      const updatedMap = new Map<string, string>();
-      addresses.forEach((addr) => {
-        const displayName = names.get(addr) || truncateAddress(addr);
-        updatedMap.set(displayName, addr);
-      });
-      setAddressMap(updatedMap);
+      if (requestId !== badgeLoadRequestRef.current) return;
+
       setText(
         addresses
           .map((addr) => names.get(addr) || truncateAddress(addr))
@@ -227,10 +334,14 @@ export default function Home() {
         { id: "badge-load" }
       );
     } catch (err) {
+      if (requestId !== badgeLoadRequestRef.current) return;
       console.error(err);
-      toast.error("Failed to fetch holders", { id: "badge-load" });
+      const msg = err instanceof Error ? err.message : "Failed to fetch holders";
+      toast.error(msg, { id: "badge-load" });
     } finally {
-      setLoadingBadge(false);
+      if (requestId === badgeLoadRequestRef.current) {
+        setLoadingBadge(false);
+      }
     }
   };
 
@@ -244,7 +355,12 @@ export default function Home() {
     }
 
     const updated = loadSavedLists().filter((l) => l.name !== name);
-    updated.unshift({ name, entries: [...entries], savedAt: Date.now() });
+    updated.unshift({
+      name,
+      entries: [...entries],
+      savedAt: Date.now(),
+      entryAddresses: alignEntryAddresses(entries.length, entryAddresses),
+    });
     persistLists(updated);
     setSavedLists(updated);
     setActiveListName(name);
@@ -255,10 +371,17 @@ export default function Home() {
 
   // Load list
   const handleLoad = (list: SavedList) => {
+    invalidateBadgeLoad();
+    resetWinner();
     setText(list.entries.join("\n"));
+    setEntryAddresses(
+      alignEntryAddresses(list.entries.length, list.entryAddresses)
+    );
     setActiveListName(list.name);
     setSelectedBadge(null);
     setShowLoadPanel(false);
+    setBadgeDropdownOpen(false);
+    setBadgeSearch("");
     toast.success(`Loaded "${list.name}"`);
   };
 
@@ -289,6 +412,16 @@ export default function Home() {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [badgeDropdownOpen]);
+
+  useEffect(() => {
+    return () => {
+      badgeLoadRequestRef.current += 1;
+      toast.dismiss("badge-load");
+    };
+  }, []);
+
+  const winnerAddress =
+    winnerIdx >= 0 ? entryAddresses[winnerIdx] ?? null : null;
 
   return (
     <main className="min-h-screen relative overflow-hidden">
@@ -382,9 +515,11 @@ export default function Home() {
                   {loadingBadge ? (
                     <Loader2 size={16} className="text-[#FFE048] animate-spin" />
                   ) : selectedBadgeDef ? (
-                    <img
+                    <Image
                       src={selectedBadgeDef.image}
                       alt=""
+                      width={24}
+                      height={24}
                       className="w-6 h-6 rounded"
                     />
                   ) : (
@@ -440,6 +575,20 @@ export default function Home() {
                           filteredBadges.map((badge) => {
                             const tokenCount =
                               badgeMap?.badgeToTokens[badge.id]?.length || 0;
+                            const strategy = badgeMap
+                              ? getBadgeStrategy(badge.id, badgeMap.badgeToTokens)
+                              : "token_map";
+                            const strategyLabel =
+                              strategy === "hkm_any" || strategy === "hkm_all"
+                                ? "ERC-1155"
+                                : strategy === "combo" || strategy === "multi_type"
+                                  ? "Combo"
+                                  : strategy === "collector"
+                                    ? "Milestone"
+                                    : strategy === "vibestr"
+                                      ? "VIBESTR"
+                                      : `${tokenCount} tokens`;
+                            const isUnavailable = strategy === "collector" || strategy === "vibestr";
                             return (
                               <button
                                 key={badge.id}
@@ -448,19 +597,21 @@ export default function Home() {
                                   selectedBadge === badge.id
                                     ? "bg-[#FFE048]/5"
                                     : ""
-                                }`}
+                                } ${isUnavailable ? "opacity-40" : ""}`}
                               >
-                                <img
+                                <Image
                                   src={badge.image}
                                   alt=""
+                                  width={28}
+                                  height={28}
                                   className="w-7 h-7 rounded flex-shrink-0"
                                 />
                                 <div className="flex-1 min-w-0">
                                   <p className="text-white font-body text-xs truncate">
                                     {badge.name}
                                   </p>
-                                  <p className="text-white/25 font-body text-[10px]">
-                                    {tokenCount} tokens
+                                  <p className={`font-body text-[10px] ${isUnavailable ? "text-white/15" : "text-white/25"}`}>
+                                    {strategyLabel}
                                   </p>
                                 </div>
                               </button>
@@ -496,7 +647,7 @@ export default function Home() {
               {/* Textarea */}
               <textarea
                 value={text}
-                onChange={(e) => setText(e.target.value)}
+                onChange={(e) => setManualText(e.target.value)}
                 placeholder={"Enter names, one per line\u2026"}
                 disabled={isSpinning || loadingBadge}
                 spellCheck={false}
@@ -507,7 +658,7 @@ export default function Home() {
               <div className="flex gap-2 mt-3">
                 <button
                   onClick={shuffle}
-                  disabled={isSpinning || entries.length < 2}
+                  disabled={isSpinning || loadingBadge || entries.length < 2}
                   className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl border border-white/[0.08] text-white/60 font-body text-xs hover:border-[#FFE048]/20 hover:text-[#FFE048] transition-all disabled:opacity-30 disabled:hover:border-white/[0.08] disabled:hover:text-white/60"
                 >
                   <Shuffle size={13} />
@@ -515,7 +666,7 @@ export default function Home() {
                 </button>
                 <button
                   onClick={sort}
-                  disabled={isSpinning || entries.length < 2}
+                  disabled={isSpinning || loadingBadge || entries.length < 2}
                   className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl border border-white/[0.08] text-white/60 font-body text-xs hover:border-[#FFE048]/20 hover:text-[#FFE048] transition-all disabled:opacity-30 disabled:hover:border-white/[0.08] disabled:hover:text-white/60"
                 >
                   <ArrowDownAZ size={13} />
@@ -523,7 +674,7 @@ export default function Home() {
                 </button>
                 <button
                   onClick={reset}
-                  disabled={isSpinning}
+                  disabled={isSpinning || loadingBadge}
                   className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl border border-white/[0.08] text-white/60 font-body text-xs hover:border-[#FFE048]/20 hover:text-[#FFE048] transition-all disabled:opacity-30 disabled:hover:border-white/[0.08] disabled:hover:text-white/60"
                 >
                   <RotateCcw size={13} />
@@ -546,7 +697,7 @@ export default function Home() {
                     setShowLoadPanel(false);
                     setSaveName(activeListName || "");
                   }}
-                  disabled={isSpinning || entries.length === 0}
+                  disabled={isSpinning || loadingBadge || entries.length === 0}
                   className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-[#FFE048]/10 border border-[#FFE048]/20 text-[#FFE048] font-body text-xs hover:bg-[#FFE048]/15 transition-all disabled:opacity-30"
                 >
                   <Save size={13} />
@@ -557,7 +708,7 @@ export default function Home() {
                     setShowLoadPanel(!showLoadPanel);
                     setShowSaveInput(false);
                   }}
-                  disabled={isSpinning || savedLists.length === 0}
+                  disabled={isSpinning || loadingBadge || savedLists.length === 0}
                   className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl border border-white/[0.08] text-white/60 font-body text-xs hover:border-[#FFE048]/20 hover:text-[#FFE048] transition-all disabled:opacity-30"
                 >
                   <FolderOpen size={13} />
@@ -636,6 +787,7 @@ export default function Home() {
                               e.stopPropagation();
                               handleDelete(list.name);
                             }}
+                            disabled={loadingBadge}
                             className="p-1.5 rounded-lg text-white/20 hover:text-red-400 hover:bg-red-400/10 transition-all opacity-0 group-hover:opacity-100"
                           >
                             <Trash2 size={13} />
@@ -661,7 +813,7 @@ export default function Home() {
       {/* Winner dialog */}
       <WinnerDialog
         winner={winner}
-        fullAddress={winner ? addressMap.get(winner) || null : null}
+        fullAddress={winnerAddress}
         onClose={handleClose}
         onRemove={handleRemove}
       />

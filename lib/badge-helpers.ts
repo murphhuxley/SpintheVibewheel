@@ -135,17 +135,7 @@ export function getHolderBadges(
     }
   }
 
-  // 3. Calculate collector milestones
-  // Count includes individual + combo badges
-  const preCollectorCount = individualBadges.length + comboBadges.length;
-  const collectorBadges: string[] = [];
-  for (const milestone of COLLECTOR_MILESTONES) {
-    if (preCollectorCount >= milestone.threshold) {
-      collectorBadges.push(milestone.badge);
-    }
-  }
-
-  // 4. Determine VIBESTR tier
+  // 3. Determine VIBESTR tier
   let vibestrTierBadge: string | null = null;
   if (vibestrBalance !== undefined) {
     for (const tier of VIBESTR_TIERS) {
@@ -153,6 +143,19 @@ export function getHolderBadges(
         vibestrTierBadge = tier.badge;
         break;
       }
+    }
+  }
+
+  // 4. Calculate collector milestones
+  // Count includes individual + combo badges + VIBESTR tier
+  const preCollectorCount =
+    individualBadges.length +
+    comboBadges.length +
+    (vibestrTierBadge ? 1 : 0);
+  const collectorBadges: string[] = [];
+  for (const milestone of COLLECTOR_MILESTONES) {
+    if (preCollectorCount >= milestone.threshold) {
+      collectorBadges.push(milestone.badge);
     }
   }
 

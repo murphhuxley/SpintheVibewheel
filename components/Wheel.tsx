@@ -9,6 +9,11 @@ const COLORS = [
   "#FBBF24", "#F472B6", "#34D399", "#FB923C",
 ];
 
+const DEFAULT_SPIN_DURATION_MS = 6740;
+const WINNER_DIALOG_DELAY_MS = 120;
+const MIN_FULL_SPINS = 8;
+const MAX_FULL_SPINS = 11;
+
 interface Props {
   entries: string[];
   onSpinEnd: (winner: string, index: number) => void;
@@ -19,9 +24,15 @@ interface Props {
 export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rotation = useRef(0);
-  const velocity = useRef(0);
   const spinning = useRef(false);
   const spinAudio = useRef<HTMLAudioElement | null>(null);
+  const spinDurationMsRef = useRef(DEFAULT_SPIN_DURATION_MS);
+  const animationFrameRef = useRef<number | null>(null);
+  const winnerTimeoutRef = useRef<number | null>(null);
+  const spinStartRotationRef = useRef(0);
+  const spinTargetRotationRef = useRef(0);
+  const spinStartTimeRef = useRef(0);
+  const drawWheelRef = useRef<() => void>(() => {});
   const entriesRef = useRef(entries);
   const onSpinEndRef = useRef(onSpinEnd);
   const onSpinStartRef = useRef(onSpinStart);
@@ -34,17 +45,33 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled }: Pro
   useEffect(() => {
     const audio = new Audio("/wheel-tick.mp3");
     audio.preload = "auto";
+    const updateDuration = () => {
+      if (Number.isFinite(audio.duration) && audio.duration > 0) {
+        spinDurationMsRef.current = Math.round(audio.duration * 1000);
+      }
+    };
+
+    audio.addEventListener("loadedmetadata", updateDuration);
     spinAudio.current = audio;
+    return () => {
+      audio.removeEventListener("loadedmetadata", updateDuration);
+      audio.pause();
+      spinAudio.current = null;
+    };
   }, []);
 
   const playSpinSound = useCallback(() => {
+    const audio = spinAudio.current;
+    if (!audio) return;
+
     try {
-      const audio = spinAudio.current;
-      if (audio) {
-        audio.currentTime = 0;
-        audio.play();
-      }
-    } catch { /* audio blocked */ }
+      audio.currentTime = 0;
+      void audio.play().catch(() => {
+        /* audio blocked */
+      });
+    } catch {
+      /* audio blocked */
+    }
   }, []);
 
   const stopSpinSound = useCallback(() => {
@@ -67,18 +94,22 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled }: Pro
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext("2d")!;
-    let raf: number;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    let resizeObserver: ResizeObserver | null = null;
+    let cancelled = false;
 
     // Resolve the Brice font family from the CSS variable for canvas use.
     // The variable is set on <body> via Next.js localFont className, not on <html>.
     let briceFamily = "serif";
     const resolveFont = () => {
+      if (cancelled) return;
       const val = getComputedStyle(document.body).getPropertyValue("--font-brice").trim();
-      if (val) briceFamily = val;
+      if (val) {
+        briceFamily = val;
+      }
+      draw();
     };
-    resolveFont();
-    document.fonts.ready.then(resolveFont);
 
     const draw = () => {
       const dpr = window.devicePixelRatio || 1;
@@ -198,38 +229,102 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled }: Pro
       ctx.restore();
     };
 
-    const loop = () => {
-      if (spinning.current) {
-        rotation.current += velocity.current;
-        velocity.current *= 0.994;
+    drawWheelRef.current = draw;
+    resolveFont();
+    void document.fonts.ready.then(resolveFont);
 
-        if (velocity.current < 0.002) {
-          spinning.current = false;
-          velocity.current = 0;
-          stopSpinSound();
-          const items = entriesRef.current;
-          const winIdx = getSegmentAt(rotation.current, items.length);
-          setTimeout(() => {
-            onSpinEndRef.current(items[winIdx], winIdx);
-          }, 350);
-        }
-      }
+    resizeObserver = new ResizeObserver(() => draw());
+    resizeObserver.observe(canvas);
+    window.addEventListener("resize", draw);
 
-      draw();
-      raf = requestAnimationFrame(loop);
+    return () => {
+      cancelled = true;
+      resizeObserver?.disconnect();
+      window.removeEventListener("resize", draw);
     };
-
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
   }, [getSegmentAt, stopSpinSound]);
+
+  useEffect(() => {
+    drawWheelRef.current();
+  }, [entries]);
+
+  const finishSpin = useCallback(() => {
+    spinning.current = false;
+    stopSpinSound();
+
+    const items = entriesRef.current;
+    const winIdx = getSegmentAt(rotation.current, items.length);
+
+    if (winnerTimeoutRef.current !== null) {
+      window.clearTimeout(winnerTimeoutRef.current);
+    }
+
+    winnerTimeoutRef.current = window.setTimeout(() => {
+      onSpinEndRef.current(items[winIdx], winIdx);
+      winnerTimeoutRef.current = null;
+    }, WINNER_DIALOG_DELAY_MS);
+  }, [getSegmentAt, stopSpinSound]);
+
+  const animateSpin = useCallback((timestamp: number) => {
+    const progress = Math.min(
+      (timestamp - spinStartTimeRef.current) / spinDurationMsRef.current,
+      1
+    );
+    const easedProgress = 1 - Math.pow(1 - progress, 3);
+
+    rotation.current =
+      spinStartRotationRef.current +
+      (spinTargetRotationRef.current - spinStartRotationRef.current) * easedProgress;
+
+    drawWheelRef.current();
+
+    if (progress < 1) {
+      animationFrameRef.current = requestAnimationFrame(animateSpin);
+      return;
+    }
+
+    animationFrameRef.current = null;
+    finishSpin();
+  }, [finishSpin]);
+
+  useEffect(() => {
+    return () => {
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+      if (winnerTimeoutRef.current !== null) {
+        window.clearTimeout(winnerTimeoutRef.current);
+      }
+      stopSpinSound();
+    };
+  }, [stopSpinSound]);
 
   const handleClick = useCallback(() => {
     if (spinning.current || disabled || entriesRef.current.length < 2) return;
-    velocity.current = 0.15 + Math.random() * 0.35;
+
+    if (winnerTimeoutRef.current !== null) {
+      window.clearTimeout(winnerTimeoutRef.current);
+      winnerTimeoutRef.current = null;
+    }
+
+    const fullSpins =
+      MIN_FULL_SPINS + Math.random() * (MAX_FULL_SPINS - MIN_FULL_SPINS);
+    const randomOffset = Math.random() * 2 * Math.PI;
+
+    spinStartRotationRef.current = rotation.current;
+    spinTargetRotationRef.current =
+      rotation.current + fullSpins * 2 * Math.PI + randomOffset;
+    spinStartTimeRef.current = performance.now();
     spinning.current = true;
+
+    if (animationFrameRef.current !== null) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+
     playSpinSound();
     onSpinStartRef.current?.();
-  }, [disabled, getSegmentAt]);
+    animationFrameRef.current = requestAnimationFrame(animateSpin);
+  }, [animateSpin, disabled, playSpinSound]);
 
   return (
     <div className="relative w-full aspect-square max-w-[640px] mx-auto select-none">

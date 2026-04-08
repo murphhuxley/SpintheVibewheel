@@ -329,7 +329,7 @@ class CollectionProcessor implements RuleProcessor {
 			requiredValues.forEach((value) => valueToTokensMap.set(value, []));
 
 			tokens.forEach((token) => {
-				const traitValue = token.traits[traitType];
+				const traitValue = token.traits[traitType] || '';
 				requiredValues.forEach((reqValue) => {
 					if (traitValue.toLowerCase().includes(reqValue.toLowerCase())) {
 						const existing = valueToTokensMap.get(reqValue) || [];
@@ -339,14 +339,24 @@ class CollectionProcessor implements RuleProcessor {
 				});
 			});
 
+			const satisfyingTokens: string[] = [];
+			const usedTokenIds = new Set<string>();
+
 			for (const requiredValue of requiredValues) {
 				const matchingTokens = valueToTokensMap.get(requiredValue);
 				if (!matchingTokens || matchingTokens.length === 0) {
 					return { qualified: false, tokenIds: [] };
 				}
+
+				const availableToken = matchingTokens.find((tokenId) => !usedTokenIds.has(tokenId));
+				if (!availableToken) {
+					return { qualified: false, tokenIds: [] };
+				}
+
+				satisfyingTokens.push(availableToken);
+				usedTokenIds.add(availableToken);
 			}
 
-			const satisfyingTokens = requiredValues.map((value) => valueToTokensMap.get(value)![0]);
 			return { qualified: true, tokenIds: satisfyingTokens };
 		}
 
@@ -408,14 +418,14 @@ class TraitCombinationProcessor implements RuleProcessor {
 	evaluate(
 		tokens: TokenData[],
 		config: { combination: Record<string, string>; matchAll: boolean }
-	): RuleProcessorResult {
-		for (const token of tokens) {
-			const results = Object.entries(config.combination).map(([traitType, requiredValue]) => {
-				const tokenValue = token.traits[traitType];
+		): RuleProcessorResult {
+			for (const token of tokens) {
+				const results = Object.entries(config.combination).map(([traitType, requiredValue]) => {
+					const tokenValue = token.traits[traitType] || '';
 
-				const useSubstringMatch = requiredValue === 'SuperRare';
-				if (useSubstringMatch) {
-					return tokenValue.toLowerCase().includes(requiredValue.toLowerCase());
+					const useSubstringMatch = requiredValue === 'SuperRare';
+					if (useSubstringMatch) {
+						return tokenValue.toLowerCase().includes(requiredValue.toLowerCase());
 				}
 
 				if (requiredValue.includes('|')) {

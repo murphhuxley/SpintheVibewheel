@@ -174,13 +174,29 @@ export function getTraders() {
 // ── Wallet Identity ──────────────────────────────────────────────────
 
 /** Resolve a wallet address to ENS name, Twitter handle, and community tag. */
-export function resolveWallet(address: string) {
-  return fetchJSON<{
-    address: string;
-    ensName: string | null;
-    twitter: string | null;
-    tag: string | null;
+export interface WalletIdentity {
+  address: string;
+  ensName: string | null;
+  twitter: string | null;
+  tag: string | null;
+}
+
+export async function resolveWallet(address: string): Promise<WalletIdentity> {
+  const data = await fetchJSON<{
+    address?: string;
+    ensName?: string | null;
+    ens?: string | null;
+    twitter?: string | null;
+    twitterHandle?: string | null;
+    tag?: string | null;
   }>(`/wallet/${address}`);
+
+  return {
+    address: data.address ?? address,
+    ensName: data.ensName ?? data.ens ?? null,
+    twitter: data.twitter ?? data.twitterHandle ?? null,
+    tag: data.tag ?? null,
+  };
 }
 
 // ── X/Twitter Mentions ───────────────────────────────────────────────
