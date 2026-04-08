@@ -34,6 +34,7 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled }: Pro
   const spinStartTimeRef = useRef(0);
   const drawWheelRef = useRef<() => void>(() => {});
   const entriesRef = useRef(entries);
+  const spinEntriesRef = useRef(entries);
   const onSpinEndRef = useRef(onSpinEnd);
   const onSpinStartRef = useRef(onSpinStart);
 
@@ -130,7 +131,7 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled }: Pro
       const cx = w / 2;
       const cy = h / 2;
       const radius = Math.min(cx, cy) - 10;
-      const items = entriesRef.current;
+      const items = spinning.current ? spinEntriesRef.current : entriesRef.current;
       const n = items.length;
       const segAngle = n > 0 ? (2 * Math.PI) / n : 2 * Math.PI;
 
@@ -252,7 +253,8 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled }: Pro
     spinning.current = false;
     stopSpinSound();
 
-    const items = entriesRef.current;
+    const items =
+      spinEntriesRef.current.length > 0 ? spinEntriesRef.current : entriesRef.current;
     const winIdx = getSegmentAt(rotation.current, items.length);
 
     if (winnerTimeoutRef.current !== null) {
@@ -311,6 +313,7 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled }: Pro
       MIN_FULL_SPINS + Math.random() * (MAX_FULL_SPINS - MIN_FULL_SPINS);
     const randomOffset = Math.random() * 2 * Math.PI;
 
+    spinEntriesRef.current = [...entriesRef.current];
     spinStartRotationRef.current = rotation.current;
     spinTargetRotationRef.current =
       rotation.current + fullSpins * 2 * Math.PI + randomOffset;

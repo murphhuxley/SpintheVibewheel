@@ -19,11 +19,8 @@ import toast from "react-hot-toast";
 import Wheel from "@/components/Wheel";
 import WinnerDialog from "@/components/WinnerDialog";
 import {
-  getHoldersForBadge,
   getBadgeStrategy,
-  resolveWalletNames,
-  truncateAddress,
-} from "@/lib/get-badge-holders";
+} from "@/lib/badge-fetch-utils";
 
 const DEFAULT_NAMES = [
   "Alice",
@@ -56,6 +53,11 @@ interface BadgeDef {
 interface BadgeTokenMap {
   badgeToTokens: Record<string, string[]>;
   tokenToBadges: Record<string, string[]>;
+}
+
+interface BadgeHoldersResponse {
+  addresses: string[];
+  entries: string[];
 }
 
 function parseEntries(value: string): string[] {
@@ -168,6 +170,7 @@ export default function Home() {
   }, []);
 
   const entries = parseEntries(text);
+  const controlsLocked = isSpinning || loadingBadge;
 
   // Filtered badges for search
   const filteredBadges = useMemo(() => {
@@ -179,7 +182,13 @@ export default function Home() {
     );
   }, [badges, badgeSearch]);
 
-  const handleSpinStart = useCallback(() => setIsSpinning(true), []);
+  const handleSpinStart = useCallback(() => {
+    setIsSpinning(true);
+    setBadgeDropdownOpen(false);
+    setBadgeSearch("");
+    setShowLoadPanel(false);
+    setShowSaveInput(false);
+  }, []);
 
   const handleSpinEnd = useCallback((name: string, index: number) => {
     setWinner(name);
@@ -219,6 +228,11 @@ export default function Home() {
   );
 
   const handleRemove = () => {
+    if (winnerIdx < 0 || winnerIdx >= entries.length) {
+      resetWinner();
+      return;
+    }
+
     const nextEntries = [...entries];
     const nextAddresses = alignEntryAddresses(entries.length, entryAddresses);
 
@@ -270,7 +284,7 @@ export default function Home() {
 
   // Badge selection handler
   const handleBadgeSelect = async (badgeId: string) => {
-    if (!badgeMap) return;
+    if (!badgeMap || controlsLocked) return;
 
     const badge = badges.find((b) => b.id === badgeId);
     const strategy = getBadgeStrategy(badgeId, badgeMap.badgeToTokens);
@@ -285,11 +299,11 @@ export default function Home() {
       return;
     }
 
-    setSelectedBadge(badgeId);
     setBadgeDropdownOpen(false);
     setBadgeSearch("");
+    setShowLoadPanel(false);
+    setShowSaveInput(false);
     setLoadingBadge(true);
-    setActiveListName(badge?.name || badgeId);
     resetWinner();
 
     const requestId = badgeLoadRequestRef.current + 1;
@@ -297,14 +311,45 @@ export default function Home() {
 
     try {
       const label = strategy === "hkm_any" || strategy === "hkm_all"
-        ? "Scanning HighKey Moments contract..."
+        ? "Loading HighKey Moments holders..."
         : strategy === "combo" || strategy === "multi_type"
-          ? "Computing combo badge holders..."
-          : "Fetching token owners on-chain...";
+          ? "Loading combo badge holders..."
+          : "Loading badge holders...";
       toast.loading(label, { id: "badge-load" });
 
-      const addresses = await getHoldersForBadge(badgeId, badgeMap.badgeToTokens);
+      const res = await fetch("/api/badge-holders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ badgeId }),
+      });
+      const data = (await res.json()) as {
+        addresses?: unknown;
+        entries?: unknown;
+        error?: unknown;
+      };
       if (requestId !== badgeLoadRequestRef.current) return;
+
+      if (!res.ok) {
+        throw new Error(
+          typeof data.error === "string"
+            ? data.error
+            : "Failed to fetch holders"
+        );
+      }
+
+      if (
+        !Array.isArray(data.addresses) ||
+        !data.addresses.every((address): address is string => typeof address === "string") ||
+        !Array.isArray(data.entries) ||
+        !data.entries.every((entry): entry is string => typeof entry === "string")
+      ) {
+        throw new Error("Invalid badge holder response");
+      }
+
+      const addresses = data.addresses;
+      const loadedEntries = data.entries;
 
       if (addresses.length === 0) {
         toast.error("No holders found for this badge", { id: "badge-load" });
@@ -312,23 +357,14 @@ export default function Home() {
         return;
       }
 
-      const truncatedEntries = addresses.map(truncateAddress);
-      setEntryAddresses(addresses);
-      setText(truncatedEntries.join("\n"));
-      toast.loading(
-        `Found ${addresses.length} holders. Resolving names...`,
-        { id: "badge-load" }
-      );
+      if (addresses.length !== loadedEntries.length) {
+        throw new Error("Badge holder response is misaligned");
+      }
 
-      const names = await resolveWalletNames(addresses);
-      if (requestId !== badgeLoadRequestRef.current) return;
-
-      setText(
-        addresses
-          .map((addr) => names.get(addr) || truncateAddress(addr))
-          .join("\n")
-      );
-
+      setEntryAddresses(alignEntryAddresses(loadedEntries.length, addresses));
+      setText(loadedEntries.join("\n"));
+      setSelectedBadge(badgeId);
+      setActiveListName(badge?.name || badgeId);
       toast.success(
         `Loaded ${addresses.length} holders for "${badge?.name}"`,
         { id: "badge-load" }
@@ -347,6 +383,8 @@ export default function Home() {
 
   // Save list
   const handleSave = () => {
+    if (controlsLocked) return;
+
     const name = saveName.trim();
     if (!name) return;
     if (entries.length === 0) {
@@ -371,6 +409,8 @@ export default function Home() {
 
   // Load list
   const handleLoad = (list: SavedList) => {
+    if (controlsLocked) return;
+
     invalidateBadgeLoad();
     resetWinner();
     setText(list.entries.join("\n"));
@@ -387,6 +427,8 @@ export default function Home() {
 
   // Delete saved list
   const handleDelete = (name: string) => {
+    if (controlsLocked) return;
+
     const updated = loadSavedLists().filter((l) => l.name !== name);
     persistLists(updated);
     setSavedLists(updated);
@@ -473,7 +515,7 @@ export default function Home() {
               entries={entries}
               onSpinEnd={handleSpinEnd}
               onSpinStart={handleSpinStart}
-              disabled={isSpinning || loadingBadge}
+              disabled={controlsLocked}
             />
             <p className="mt-3 text-white/25 font-body text-xs">
               {loadingBadge
@@ -507,9 +549,9 @@ export default function Home() {
               <div className="relative" ref={badgeDropdownRef}>
                 <button
                   onClick={() =>
-                    !loadingBadge && setBadgeDropdownOpen(!badgeDropdownOpen)
+                    !controlsLocked && setBadgeDropdownOpen(!badgeDropdownOpen)
                   }
-                  disabled={loadingBadge || badges.length === 0}
+                  disabled={controlsLocked || badges.length === 0}
                   className="w-full flex items-center gap-3 px-3 py-3 rounded-xl bg-black/40 border border-white/[0.08] hover:border-[#FFE048]/20 transition-all disabled:opacity-40 text-left"
                 >
                   {loadingBadge ? (
@@ -562,6 +604,7 @@ export default function Home() {
                           onChange={(e) => setBadgeSearch(e.target.value)}
                           placeholder="Search badges..."
                           autoFocus
+                          disabled={controlsLocked}
                           className="w-full bg-black/40 border border-white/[0.08] rounded-lg px-3 py-2 text-white font-body text-xs focus:outline-none focus:border-[#FFE048]/30 placeholder:text-white/20"
                         />
                       </div>
@@ -593,11 +636,12 @@ export default function Home() {
                               <button
                                 key={badge.id}
                                 onClick={() => handleBadgeSelect(badge.id)}
+                                disabled={controlsLocked || isUnavailable}
                                 className={`w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/[0.04] transition-colors text-left ${
                                   selectedBadge === badge.id
                                     ? "bg-[#FFE048]/5"
                                     : ""
-                                } ${isUnavailable ? "opacity-40" : ""}`}
+                                } ${isUnavailable ? "opacity-40" : ""} disabled:cursor-not-allowed disabled:hover:bg-transparent`}
                               >
                                 <Image
                                   src={badge.image}
@@ -649,7 +693,7 @@ export default function Home() {
                 value={text}
                 onChange={(e) => setManualText(e.target.value)}
                 placeholder={"Enter names, one per line\u2026"}
-                disabled={isSpinning || loadingBadge}
+                disabled={controlsLocked}
                 spellCheck={false}
                 className="w-full h-52 bg-black/40 border border-white/[0.08] rounded-xl p-4 text-white font-body text-sm leading-relaxed resize-none focus:outline-none focus:border-[#FFE048]/30 transition-colors placeholder:text-white/20 disabled:opacity-40"
               />
@@ -658,7 +702,7 @@ export default function Home() {
               <div className="flex gap-2 mt-3">
                 <button
                   onClick={shuffle}
-                  disabled={isSpinning || loadingBadge || entries.length < 2}
+                  disabled={controlsLocked || entries.length < 2}
                   className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl border border-white/[0.08] text-white/60 font-body text-xs hover:border-[#FFE048]/20 hover:text-[#FFE048] transition-all disabled:opacity-30 disabled:hover:border-white/[0.08] disabled:hover:text-white/60"
                 >
                   <Shuffle size={13} />
@@ -666,7 +710,7 @@ export default function Home() {
                 </button>
                 <button
                   onClick={sort}
-                  disabled={isSpinning || loadingBadge || entries.length < 2}
+                  disabled={controlsLocked || entries.length < 2}
                   className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl border border-white/[0.08] text-white/60 font-body text-xs hover:border-[#FFE048]/20 hover:text-[#FFE048] transition-all disabled:opacity-30 disabled:hover:border-white/[0.08] disabled:hover:text-white/60"
                 >
                   <ArrowDownAZ size={13} />
@@ -674,7 +718,7 @@ export default function Home() {
                 </button>
                 <button
                   onClick={reset}
-                  disabled={isSpinning || loadingBadge}
+                  disabled={controlsLocked}
                   className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl border border-white/[0.08] text-white/60 font-body text-xs hover:border-[#FFE048]/20 hover:text-[#FFE048] transition-all disabled:opacity-30 disabled:hover:border-white/[0.08] disabled:hover:text-white/60"
                 >
                   <RotateCcw size={13} />
@@ -693,11 +737,12 @@ export default function Home() {
               <div className="flex gap-2 mb-3">
                 <button
                   onClick={() => {
+                    if (controlsLocked) return;
                     setShowSaveInput(!showSaveInput);
                     setShowLoadPanel(false);
                     setSaveName(activeListName || "");
                   }}
-                  disabled={isSpinning || loadingBadge || entries.length === 0}
+                  disabled={controlsLocked || entries.length === 0}
                   className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-[#FFE048]/10 border border-[#FFE048]/20 text-[#FFE048] font-body text-xs hover:bg-[#FFE048]/15 transition-all disabled:opacity-30"
                 >
                   <Save size={13} />
@@ -705,10 +750,11 @@ export default function Home() {
                 </button>
                 <button
                   onClick={() => {
+                    if (controlsLocked) return;
                     setShowLoadPanel(!showLoadPanel);
                     setShowSaveInput(false);
                   }}
-                  disabled={isSpinning || loadingBadge || savedLists.length === 0}
+                  disabled={controlsLocked || savedLists.length === 0}
                   className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl border border-white/[0.08] text-white/60 font-body text-xs hover:border-[#FFE048]/20 hover:text-[#FFE048] transition-all disabled:opacity-30"
                 >
                   <FolderOpen size={13} />
@@ -731,19 +777,26 @@ export default function Home() {
                         type="text"
                         value={saveName}
                         onChange={(e) => setSaveName(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && handleSave()}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !controlsLocked) {
+                            handleSave();
+                          }
+                        }}
                         placeholder="List name..."
                         autoFocus
+                        disabled={controlsLocked}
                         className="flex-1 bg-black/40 border border-white/[0.08] rounded-lg px-3 py-2 text-white font-body text-sm focus:outline-none focus:border-[#FFE048]/30 placeholder:text-white/20"
                       />
                       <button
                         onClick={handleSave}
+                        disabled={controlsLocked}
                         className="px-4 py-2 rounded-lg bg-[#FFE048] text-[#050505] font-display font-bold text-xs hover:shadow-[0_0_12px_rgba(255,224,72,0.3)] transition-all active:scale-95"
                       >
                         Save
                       </button>
                       <button
-                        onClick={() => setShowSaveInput(false)}
+                        onClick={() => !controlsLocked && setShowSaveInput(false)}
+                        disabled={controlsLocked}
                         className="px-2 py-2 rounded-lg border border-white/[0.08] text-white/40 hover:text-white/60 transition-colors"
                       >
                         <X size={14} />
@@ -768,11 +821,13 @@ export default function Home() {
                         <div
                           key={list.name}
                           className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border transition-all cursor-pointer group ${
-                            activeListName === list.name
-                              ? "border-[#FFE048]/30 bg-[#FFE048]/5"
-                              : "border-white/[0.06] hover:border-white/[0.12]"
+                            controlsLocked
+                              ? "pointer-events-none opacity-50"
+                              : activeListName === list.name
+                                ? "border-[#FFE048]/30 bg-[#FFE048]/5"
+                                : "border-white/[0.06] hover:border-white/[0.12]"
                           }`}
-                          onClick={() => handleLoad(list)}
+                          onClick={() => !controlsLocked && handleLoad(list)}
                         >
                           <div className="flex-1 min-w-0">
                             <p className="text-white font-body text-sm truncate">
@@ -787,7 +842,7 @@ export default function Home() {
                               e.stopPropagation();
                               handleDelete(list.name);
                             }}
-                            disabled={loadingBadge}
+                            disabled={controlsLocked}
                             className="p-1.5 rounded-lg text-white/20 hover:text-red-400 hover:bg-red-400/10 transition-all opacity-0 group-hover:opacity-100"
                           >
                             <Trash2 size={13} />
