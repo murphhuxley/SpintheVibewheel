@@ -14,6 +14,7 @@ import {
   Award,
   Loader2,
   ChevronDown,
+  History,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import Wheel from "@/components/Wheel";
@@ -34,12 +35,21 @@ const DEFAULT_NAMES = [
 ];
 
 const STORAGE_KEY = "vibewheel:lists";
+const CHALLENGE_HISTORY_KEY = "vibewheel:challenge-history";
+const MAX_CHALLENGE_HISTORY = 12;
 
 interface SavedList {
   name: string;
   entries: string[];
   savedAt: number;
   entryAddresses?: Array<string | null>;
+}
+
+interface ChallengeHistoryEntry {
+  id: string;
+  badgeIds: string[];
+  createdAt: number;
+  entryCount: number;
 }
 
 interface BadgeDef {
@@ -149,6 +159,58 @@ function loadSavedLists(): SavedList[] {
 
 function persistLists(lists: SavedList[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(lists));
+}
+
+function loadChallengeHistory(): ChallengeHistoryEntry[] {
+  try {
+    const raw = localStorage.getItem(CHALLENGE_HISTORY_KEY);
+    if (!raw) return [];
+
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed.flatMap((item) => {
+      if (!item || typeof item !== "object") return [];
+      const record = item as {
+        id?: unknown;
+        badgeIds?: unknown;
+        createdAt?: unknown;
+        entryCount?: unknown;
+      };
+
+      const id = typeof record.id === "string" ? record.id : "";
+      const badgeIds = Array.isArray(record.badgeIds)
+        ? record.badgeIds.filter(
+            (badgeId: unknown): badgeId is string => typeof badgeId === "string"
+          )
+        : [];
+
+      if (!id || badgeIds.length === 0) return [];
+
+      return [
+        {
+          id,
+          badgeIds,
+          createdAt:
+            typeof record.createdAt === "number"
+              ? record.createdAt
+              : Date.now(),
+          entryCount:
+            typeof record.entryCount === "number" ? record.entryCount : 0,
+        } satisfies ChallengeHistoryEntry,
+      ];
+    });
+  } catch {
+    return [];
+  }
+}
+
+function persistChallengeHistory(history: ChallengeHistoryEntry[]) {
+  localStorage.setItem(CHALLENGE_HISTORY_KEY, JSON.stringify(history));
+}
+
+function createChallengeHistoryId() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function pickRandomItems<T>(items: T[], count: number): T[] {
