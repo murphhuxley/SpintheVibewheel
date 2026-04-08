@@ -230,6 +230,12 @@ export default function Home() {
   const [winnerIdx, setWinnerIdx] = useState(-1);
   const [isSpinning, setIsSpinning] = useState(false);
   const [savedLists, setSavedLists] = useState<SavedList[]>([]);
+  const [challengeHistory, setChallengeHistory] = useState<
+    ChallengeHistoryEntry[]
+  >([]);
+  const [activeChallengeHistoryId, setActiveChallengeHistoryId] = useState<
+    string | null
+  >(null);
   const [showSaveInput, setShowSaveInput] = useState(false);
   const [showLoadPanel, setShowLoadPanel] = useState(false);
   const [saveName, setSaveName] = useState("");
@@ -266,6 +272,7 @@ export default function Home() {
   // Load saved lists on mount
   useEffect(() => {
     setSavedLists(loadSavedLists());
+    setChallengeHistory(loadChallengeHistory());
   }, []);
 
   const entries = parseEntries(text);
@@ -299,6 +306,14 @@ export default function Home() {
       .map((badgeId) => badgeLookup.get(badgeId))
       .filter((badge): badge is BadgeDef => Boolean(badge));
   }, [activeBadgeIds, badges]);
+  const formatChallengeTimestamp = useCallback((value: number) => {
+    return new Date(value).toLocaleString([], {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }, []);
 
   const handleSpinStart = useCallback(() => {
     setIsSpinning(true);
@@ -340,6 +355,7 @@ export default function Home() {
 
       resetWinner();
       setEntryAddresses([]);
+      setActiveChallengeHistoryId(null);
       setActiveBadgeIds([]);
       setBadgeMatchesByAddress({});
       setText(value);
@@ -402,6 +418,7 @@ export default function Home() {
     resetWinner();
     setText(DEFAULT_NAMES.join("\n"));
     setEntryAddresses(alignEntryAddresses(DEFAULT_NAMES.length));
+    setActiveChallengeHistoryId(null);
     setActiveBadgeIds([]);
     setBadgeMatchesByAddress({});
     setActiveListName(null);
@@ -417,9 +434,10 @@ export default function Home() {
       loadingLabel: string;
       activeName: string;
       successName: string;
+      activeHistoryId?: string | null;
     }
-  ) => {
-    if (!badgeMap || controlsLocked || badgeIds.length === 0) return;
+  ): Promise<{ entryCount: number } | null> => {
+    if (!badgeMap || controlsLocked || badgeIds.length === 0) return null;
 
     setBadgeDropdownOpen(false);
     setBadgeSearch("");
@@ -505,7 +523,7 @@ export default function Home() {
       if (addresses.length === 0) {
         toast.error("No holders found for this badge", { id: "badge-load" });
         setLoadingBadge(false);
-        return;
+        return null;
       }
 
       if (addresses.length !== loadedEntries.length) {
@@ -516,12 +534,14 @@ export default function Home() {
       setBadgeMatchesByAddress(loadedBadgeMatches);
       setText(loadedEntries.join("\n"));
       setSelectedBadge(options.singleBadgeId);
+      setActiveChallengeHistoryId(options.activeHistoryId ?? null);
       setActiveBadgeIds(badgeIds);
       setActiveListName(options.activeName);
       toast.success(
         `Loaded ${addresses.length} holders for ${options.successName}`,
         { id: "badge-load" }
       );
+      return { entryCount: addresses.length };
     } catch (err) {
       if (requestId !== badgeLoadRequestRef.current) return;
       console.error(err);
@@ -532,6 +552,7 @@ export default function Home() {
         setLoadingBadge(false);
       }
     }
+    return null;
   }, [badgeMap, controlsLocked, resetWinner]);
 
   // Badge selection handler
