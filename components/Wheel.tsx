@@ -201,7 +201,7 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled }: Pro
     const loop = () => {
       if (spinning.current) {
         rotation.current += velocity.current;
-        velocity.current *= 0.9875;
+        velocity.current *= 0.994;
 
         if (velocity.current < 0.002) {
           spinning.current = false;
