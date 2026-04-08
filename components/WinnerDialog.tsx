@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Copy, Check } from "lucide-react";
 
@@ -26,6 +26,16 @@ interface ConfettiPiece {
 export default function WinnerDialog({ winner, fullAddress, onClose, onRemove }: Props) {
   const [confetti, setConfetti] = useState<ConfettiPiece[]>([]);
   const [copied, setCopied] = useState(false);
+  const cheerRef = useRef<HTMLAudioElement | null>(null);
+  const yayRef = useRef<HTMLAudioElement | null>(null);
+
+  // Preload celebration sounds
+  useEffect(() => {
+    cheerRef.current = new Audio("/cheer.mp3");
+    cheerRef.current.preload = "auto";
+    yayRef.current = new Audio("/yay.mp3");
+    yayRef.current.preload = "auto";
+  }, []);
 
   const copyValue = fullAddress || winner || "";
 
@@ -48,6 +58,11 @@ export default function WinnerDialog({ winner, fullAddress, onClose, onRemove }:
   useEffect(() => {
     if (winner) {
       setCopied(false);
+      // Play celebration sounds
+      try {
+        if (cheerRef.current) { cheerRef.current.currentTime = 0; cheerRef.current.play().catch(() => {}); }
+        if (yayRef.current) { yayRef.current.currentTime = 0; yayRef.current.play().catch(() => {}); }
+      } catch { /* audio blocked */ }
       setConfetti(
         Array.from({ length: 70 }, () => ({
           x: Math.random() * 100,
