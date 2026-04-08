@@ -135,15 +135,30 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled }: Pro
       const n = items.length;
       const segAngle = n > 0 ? (2 * Math.PI) / n : 2 * Math.PI;
 
-      // Outer glow
+      // Drop shadow beneath wheel for 3D lift
       ctx.save();
-      ctx.shadowColor = "rgba(255, 224, 72, 0.15)";
-      ctx.shadowBlur = 40;
+      ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
+      ctx.shadowBlur = 30;
+      ctx.shadowOffsetY = 8;
       ctx.beginPath();
       ctx.arc(cx, cy, radius, 0, 2 * Math.PI);
       ctx.fillStyle = "#121212";
       ctx.fill();
       ctx.restore();
+
+      // Outer bevel ring (3D rim)
+      const rimWidth = 8;
+      const rimGrad = ctx.createLinearGradient(cx, cy - radius, cx, cy + radius);
+      rimGrad.addColorStop(0, "#FFE048");
+      rimGrad.addColorStop(0.3, "#fff8b8");
+      rimGrad.addColorStop(0.5, "#FFE048");
+      rimGrad.addColorStop(0.7, "#c4a520");
+      rimGrad.addColorStop(1, "#8a6f10");
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius + rimWidth / 2, 0, 2 * Math.PI);
+      ctx.strokeStyle = rimGrad;
+      ctx.lineWidth = rimWidth;
+      ctx.stroke();
 
       if (n === 0) {
         ctx.fillStyle = "#555";
@@ -196,36 +211,89 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled }: Pro
         }
       }
 
-      // Outer ring
+      // 3D lighting overlay — highlight top-left, shadow bottom-right
+      const lightGrad = ctx.createRadialGradient(
+        -radius * 0.35, -radius * 0.35, 0,
+        0, 0, radius
+      );
+      lightGrad.addColorStop(0, "rgba(255, 255, 255, 0.12)");
+      lightGrad.addColorStop(0.4, "rgba(255, 255, 255, 0.03)");
+      lightGrad.addColorStop(0.6, "rgba(0, 0, 0, 0)");
+      lightGrad.addColorStop(1, "rgba(0, 0, 0, 0.18)");
       ctx.beginPath();
       ctx.arc(0, 0, radius, 0, 2 * Math.PI);
-      ctx.strokeStyle = "rgba(255,224,72,0.5)";
-      ctx.lineWidth = 3;
-      ctx.stroke();
+      ctx.fillStyle = lightGrad;
+      ctx.fill();
 
-      // Pegs at segment boundaries
+      // Pegs at segment boundaries — metallic 3D pins
       for (let i = 0; i < n; i++) {
         const a = i * segAngle - Math.PI / 2;
         const px = Math.cos(a) * radius;
         const py = Math.sin(a) * radius;
+        const pegR = 4;
+
+        // Peg shadow
+        ctx.save();
+        ctx.shadowColor = "rgba(0,0,0,0.5)";
+        ctx.shadowBlur = 3;
+        ctx.shadowOffsetY = 1;
         ctx.beginPath();
-        ctx.arc(px, py, 3.5, 0, 2 * Math.PI);
-        ctx.fillStyle = "#050505";
+        ctx.arc(px, py, pegR, 0, 2 * Math.PI);
+        ctx.fillStyle = "#1a1a1a";
         ctx.fill();
-        ctx.strokeStyle = "rgba(255,224,72,0.3)";
-        ctx.lineWidth = 1;
-        ctx.stroke();
+        ctx.restore();
+
+        // Metallic gradient
+        const pegGrad = ctx.createRadialGradient(px - 1, py - 1, 0, px, py, pegR);
+        pegGrad.addColorStop(0, "#FFE048");
+        pegGrad.addColorStop(0.6, "#c4a520");
+        pegGrad.addColorStop(1, "#6b4f0a");
+        ctx.beginPath();
+        ctx.arc(px, py, pegR, 0, 2 * Math.PI);
+        ctx.fillStyle = pegGrad;
+        ctx.fill();
       }
 
-      // Center hub
-      const hubR = Math.max(20, Math.min(32, radius * 0.12));
+      // Center hub — 3D dome effect
+      const hubR = Math.max(22, Math.min(36, radius * 0.13));
+
+      // Hub shadow
+      ctx.save();
+      ctx.shadowColor = "rgba(0,0,0,0.4)";
+      ctx.shadowBlur = 10;
       ctx.beginPath();
       ctx.arc(0, 0, hubR, 0, 2 * Math.PI);
-      ctx.fillStyle = "#121212";
+      ctx.fillStyle = "#0a0a0a";
       ctx.fill();
-      ctx.strokeStyle = "#FFE048";
-      ctx.lineWidth = 2.5;
+      ctx.restore();
+
+      // Hub gradient (dome highlight)
+      const hubGrad = ctx.createRadialGradient(-hubR * 0.3, -hubR * 0.3, 0, 0, 0, hubR);
+      hubGrad.addColorStop(0, "#2a2a2a");
+      hubGrad.addColorStop(0.5, "#151515");
+      hubGrad.addColorStop(1, "#0a0a0a");
+      ctx.beginPath();
+      ctx.arc(0, 0, hubR, 0, 2 * Math.PI);
+      ctx.fillStyle = hubGrad;
+      ctx.fill();
+
+      // Hub gold ring
+      const hubRingGrad = ctx.createLinearGradient(0, -hubR, 0, hubR);
+      hubRingGrad.addColorStop(0, "#FFE048");
+      hubRingGrad.addColorStop(0.5, "#fff8b8");
+      hubRingGrad.addColorStop(1, "#c4a520");
+      ctx.strokeStyle = hubRingGrad;
+      ctx.lineWidth = 3;
       ctx.stroke();
+
+      // Hub center dot (highlight)
+      const dotGrad = ctx.createRadialGradient(-2, -2, 0, 0, 0, 6);
+      dotGrad.addColorStop(0, "#FFE048");
+      dotGrad.addColorStop(1, "#c4a520");
+      ctx.beginPath();
+      ctx.arc(0, 0, 5, 0, 2 * Math.PI);
+      ctx.fillStyle = dotGrad;
+      ctx.fill();
 
       ctx.restore();
     };
@@ -331,19 +399,52 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled }: Pro
 
   return (
     <div className="relative w-full aspect-square max-w-[640px] mx-auto select-none">
-      {/* Pointer */}
+      {/* Pointer — 3D gold arrow */}
       <div
         className="absolute top-0 left-1/2 z-10 pointer-events-none"
-        style={{
-          transform: "translateX(-50%)",
-          width: 0,
-          height: 0,
-          borderLeft: "14px solid transparent",
-          borderRight: "14px solid transparent",
-          borderTop: "30px solid #FFE048",
-          filter: "drop-shadow(0 4px 8px rgba(255,224,72,0.5))",
-        }}
-      />
+        style={{ transform: "translateX(-50%) translateY(-2px)" }}
+      >
+        {/* Shadow layer */}
+        <div
+          style={{
+            position: "absolute",
+            top: 4,
+            left: -1,
+            width: 0,
+            height: 0,
+            borderLeft: "16px solid transparent",
+            borderRight: "16px solid transparent",
+            borderTop: "34px solid rgba(0,0,0,0.4)",
+            filter: "blur(3px)",
+          }}
+        />
+        {/* Main pointer */}
+        <div
+          style={{
+            position: "relative",
+            width: 0,
+            height: 0,
+            borderLeft: "15px solid transparent",
+            borderRight: "15px solid transparent",
+            borderTop: "32px solid #FFE048",
+            filter: "drop-shadow(0 2px 4px rgba(255,224,72,0.6))",
+          }}
+        />
+        {/* Highlight stripe */}
+        <div
+          style={{
+            position: "absolute",
+            top: 2,
+            left: "50%",
+            transform: "translateX(-50%)",
+            width: 0,
+            height: 0,
+            borderLeft: "6px solid transparent",
+            borderRight: "6px solid transparent",
+            borderTop: "16px solid rgba(255,255,255,0.3)",
+          }}
+        />
+      </div>
       <canvas
         ref={canvasRef}
         onClick={handleClick}
