@@ -142,14 +142,13 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled }: Pro
         ctx.lineWidth = 1.5;
         ctx.stroke();
 
-        // Text on segment — size scales with arc height
+        // Text on segment — size must fit within the slice
         if (n <= 80) {
           ctx.save();
           ctx.rotate(a1 + segAngle / 2);
 
-          // Arc height at ~60% radius determines max font size
-          const arcHeight = 2 * (radius * 0.6) * Math.sin(segAngle / 2);
-          const fs = Math.max(8, Math.min(42, arcHeight * 0.55));
+          // Font size based on arc chord at 70% radius, capped conservatively
+          const fs = Math.max(8, Math.min(28, (segAngle * radius) / 5.5));
           ctx.font = `700 ${fs}px ${briceFamily}`;
           ctx.textAlign = "right";
           ctx.textBaseline = "middle";
@@ -157,7 +156,7 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled }: Pro
           const isLight = ["#FFE048", "#2EFF2E", "#FBBF24", "#34D399"].includes(color);
           ctx.fillStyle = isLight ? "#050505" : "#ffffff";
 
-          const maxLen = n > 30 ? 8 : n > 15 ? 12 : 20;
+          const maxLen = n > 20 ? 10 : n > 10 ? 14 : 20;
           const label = items[i].toUpperCase();
           const txt = label.length > maxLen ? label.slice(0, maxLen - 1) + "\u2026" : label;
           ctx.fillText(txt, radius - 14, 0);
