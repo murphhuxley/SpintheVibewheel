@@ -48,6 +48,10 @@ interface BadgeDef {
   name: string;
   description: string;
   image: string;
+  enabled?: boolean;
+  requirement?: {
+    type?: string;
+  };
 }
 
 interface BadgeTokenMap {
@@ -58,6 +62,24 @@ interface BadgeTokenMap {
 interface BadgeHoldersResponse {
   addresses: string[];
   entries: string[];
+  badgeMatchesByAddress?: Record<
+    string,
+    Array<{
+      badgeId: string;
+      badgeName: string;
+      qualificationType: "standard" | "direct" | "linked";
+      balanceDisplay?: string;
+      minimumRequired?: string;
+    }>
+  >;
+}
+
+interface BadgeMatchInfo {
+  badgeId: string;
+  badgeName: string;
+  qualificationType: "standard" | "direct" | "linked";
+  balanceDisplay?: string;
+  minimumRequired?: string;
 }
 
 function parseEntries(value: string): string[] {
@@ -129,6 +151,17 @@ function persistLists(lists: SavedList[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(lists));
 }
 
+function pickRandomItems<T>(items: T[], count: number): T[] {
+  const pool = [...items];
+
+  for (let index = pool.length - 1; index > 0; index -= 1) {
+    const randomIndex = Math.floor(Math.random() * (index + 1));
+    [pool[index], pool[randomIndex]] = [pool[randomIndex], pool[index]];
+  }
+
+  return pool.slice(0, count);
+}
+
 export default function Home() {
   const [text, setText] = useState(DEFAULT_NAMES.join("\n"));
   const [winner, setWinner] = useState<string | null>(null);
@@ -144,12 +177,16 @@ export default function Home() {
   const [badges, setBadges] = useState<BadgeDef[]>([]);
   const [badgeMap, setBadgeMap] = useState<BadgeTokenMap | null>(null);
   const [selectedBadge, setSelectedBadge] = useState<string | null>(null);
+  const [activeBadgeIds, setActiveBadgeIds] = useState<string[]>([]);
   const [badgeDropdownOpen, setBadgeDropdownOpen] = useState(false);
   const [badgeSearch, setBadgeSearch] = useState("");
   const [loadingBadge, setLoadingBadge] = useState(false);
   const [entryAddresses, setEntryAddresses] = useState<Array<string | null>>(
     () => alignEntryAddresses(DEFAULT_NAMES.length)
   );
+  const [badgeMatchesByAddress, setBadgeMatchesByAddress] = useState<
+    Record<string, BadgeMatchInfo[]>
+  >({});
   const badgeLoadRequestRef = useRef(0);
 
   // Load badge data on mount
@@ -181,6 +218,25 @@ export default function Home() {
         b.name.toLowerCase().includes(q) || b.id.toLowerCase().includes(q)
     );
   }, [badges, badgeSearch]);
+  const supportedBadges = useMemo(() => {
+    if (!badgeMap) return [];
+
+    return badges.filter((badge) => {
+      if (badge.enabled === false) return false;
+      return (
+        getBadgeStrategy(badge.id, badgeMap.badgeToTokens, badge) !==
+        "unsupported"
+      );
+    });
+  }, [badgeMap, badges]);
+  const activeBadgeDefs = useMemo(() => {
+    if (activeBadgeIds.length === 0) return [];
+
+    const badgeLookup = new Map(badges.map((badge) => [badge.id, badge]));
+    return activeBadgeIds
+      .map((badgeId) => badgeLookup.get(badgeId))
+      .filter((badge): badge is BadgeDef => Boolean(badge));
+  }, [activeBadgeIds, badges]);
 
   const handleSpinStart = useCallback(() => {
     setIsSpinning(true);
@@ -222,6 +278,8 @@ export default function Home() {
 
       resetWinner();
       setEntryAddresses([]);
+      setActiveBadgeIds([]);
+      setBadgeMatchesByAddress({});
       setText(value);
     },
     [invalidateBadgeLoad, loadingBadge, resetWinner, selectedBadge]
@@ -276,28 +334,24 @@ export default function Home() {
     resetWinner();
     setText(DEFAULT_NAMES.join("\n"));
     setEntryAddresses(alignEntryAddresses(DEFAULT_NAMES.length));
+    setActiveBadgeIds([]);
+    setBadgeMatchesByAddress({});
     setActiveListName(null);
     setSelectedBadge(null);
     setBadgeDropdownOpen(false);
     setBadgeSearch("");
   };
 
-  // Badge selection handler
-  const handleBadgeSelect = async (badgeId: string) => {
-    if (!badgeMap || controlsLocked) return;
-
-    const badge = badges.find((b) => b.id === badgeId);
-    const strategy = getBadgeStrategy(badgeId, badgeMap.badgeToTokens);
-
-    // Unsupported strategies
-    if (strategy === "collector") {
-      toast.error("Collector milestone badges require per-wallet evaluation — not supported yet");
-      return;
+  const loadBadgeEntries = useCallback(async (
+    badgeIds: string[],
+    options: {
+      singleBadgeId: string | null;
+      loadingLabel: string;
+      activeName: string;
+      successName: string;
     }
-    if (strategy === "vibestr") {
-      toast.error("VIBESTR tier badges require ERC-20 balance scanning — coming soon");
-      return;
-    }
+  ) => {
+    if (!badgeMap || controlsLocked || badgeIds.length === 0) return;
 
     setBadgeDropdownOpen(false);
     setBadgeSearch("");
@@ -310,23 +364,20 @@ export default function Home() {
     badgeLoadRequestRef.current = requestId;
 
     try {
-      const label = strategy === "hkm_any" || strategy === "hkm_all"
-        ? "Loading HighKey Moments holders..."
-        : strategy === "combo" || strategy === "multi_type"
-          ? "Loading combo badge holders..."
-          : "Loading badge holders...";
-      toast.loading(label, { id: "badge-load" });
+      toast.loading(options.loadingLabel, { id: "badge-load" });
 
       const res = await fetch("/api/badge-holders", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ badgeId }),
+        body: JSON.stringify(
+          badgeIds.length === 1
+            ? { badgeId: badgeIds[0] }
+            : { badgeIds }
+        ),
       });
-      const data = (await res.json()) as {
-        addresses?: unknown;
-        entries?: unknown;
+      const data = (await res.json()) as BadgeHoldersResponse & {
         error?: unknown;
       };
       if (requestId !== badgeLoadRequestRef.current) return;
@@ -350,6 +401,38 @@ export default function Home() {
 
       const addresses = data.addresses;
       const loadedEntries = data.entries;
+      const loadedBadgeMatches =
+        data.badgeMatchesByAddress &&
+        typeof data.badgeMatchesByAddress === "object" &&
+        !Array.isArray(data.badgeMatchesByAddress)
+          ? Object.fromEntries(
+              Object.entries(data.badgeMatchesByAddress).flatMap(
+                ([address, matches]) => {
+                  if (
+                    !Array.isArray(matches) ||
+                    matches.some(
+                      (match) =>
+                        !match ||
+                        typeof match !== "object" ||
+                        typeof match.badgeId !== "string" ||
+                        typeof match.badgeName !== "string" ||
+                        (match.qualificationType !== "standard" &&
+                          match.qualificationType !== "direct" &&
+                          match.qualificationType !== "linked") ||
+                        (match.qualificationType !== "standard" &&
+                          typeof match.balanceDisplay !== "string") ||
+                        (match.qualificationType !== "standard" &&
+                          typeof match.minimumRequired !== "string")
+                    )
+                  ) {
+                    return [];
+                  }
+
+                  return [[address.toLowerCase(), matches as BadgeMatchInfo[]]];
+                }
+              )
+            )
+          : {};
 
       if (addresses.length === 0) {
         toast.error("No holders found for this badge", { id: "badge-load" });
@@ -362,11 +445,13 @@ export default function Home() {
       }
 
       setEntryAddresses(alignEntryAddresses(loadedEntries.length, addresses));
+      setBadgeMatchesByAddress(loadedBadgeMatches);
       setText(loadedEntries.join("\n"));
-      setSelectedBadge(badgeId);
-      setActiveListName(badge?.name || badgeId);
+      setSelectedBadge(options.singleBadgeId);
+      setActiveBadgeIds(badgeIds);
+      setActiveListName(options.activeName);
       toast.success(
-        `Loaded ${addresses.length} holders for "${badge?.name}"`,
+        `Loaded ${addresses.length} holders for ${options.successName}`,
         { id: "badge-load" }
       );
     } catch (err) {
@@ -379,6 +464,53 @@ export default function Home() {
         setLoadingBadge(false);
       }
     }
+  }, [badgeMap, controlsLocked, resetWinner]);
+
+  // Badge selection handler
+  const handleBadgeSelect = async (badgeId: string) => {
+    if (!badgeMap || controlsLocked) return;
+
+    const badge = badges.find((b) => b.id === badgeId);
+    const strategy = getBadgeStrategy(badgeId, badgeMap.badgeToTokens, badge);
+
+    if (strategy === "unsupported") {
+      toast.error("That badge isn't supported yet");
+      return;
+    }
+
+    const loadingLabel = strategy === "hkm_any" || strategy === "hkm_all"
+      ? "Loading HighKey Moments holders..."
+      : strategy === "combo" || strategy === "multi_type"
+        ? "Loading combo badge holders..."
+        : strategy === "leaderboard"
+          ? "Loading leaderboard holders..."
+          : "Loading badge holders...";
+
+    await loadBadgeEntries([badgeId], {
+      singleBadgeId: badgeId,
+      loadingLabel,
+      activeName: badge?.name || badgeId,
+      successName: `"${badge?.name || badgeId}"`,
+    });
+  };
+
+  const handleRandomizeBadgeSet = async () => {
+    if (controlsLocked || supportedBadges.length < 5) {
+      if (supportedBadges.length < 5) {
+        toast.error("Need at least 5 supported badges to build a challenge");
+      }
+      return;
+    }
+
+    const chosenBadges = pickRandomItems(supportedBadges, 5);
+    const chosenIds = chosenBadges.map((badge) => badge.id);
+
+    await loadBadgeEntries(chosenIds, {
+      singleBadgeId: null,
+      loadingLabel: "Building 5-badge challenge...",
+      activeName: "Random 5 Badge Challenge",
+      successName: "your 5-badge challenge",
+    });
   };
 
   // Save list
@@ -417,6 +549,8 @@ export default function Home() {
     setEntryAddresses(
       alignEntryAddresses(list.entries.length, list.entryAddresses)
     );
+    setActiveBadgeIds([]);
+    setBadgeMatchesByAddress({});
     setActiveListName(list.name);
     setSelectedBadge(null);
     setShowLoadPanel(false);
@@ -464,6 +598,10 @@ export default function Home() {
 
   const winnerAddress =
     winnerIdx >= 0 ? entryAddresses[winnerIdx] ?? null : null;
+  const winnerBadgeMatches =
+    winnerAddress && badgeMatchesByAddress
+      ? badgeMatchesByAddress[winnerAddress.toLowerCase()] ?? []
+      : null;
 
   return (
     <main className="min-h-screen relative overflow-hidden">
@@ -486,7 +624,7 @@ export default function Home() {
       <div className="relative z-10 max-w-[1400px] mx-auto px-4 sm:px-6 py-6">
         {/* Header */}
         <motion.header
-          initial={{ opacity: 0, y: -10 }}
+          initial={false}
           animate={{ opacity: 1, y: 0 }}
           className="flex items-center justify-center gap-3 mb-6"
         >
@@ -506,7 +644,7 @@ export default function Home() {
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-8 items-center">
           {/* Wheel panel */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.92 }}
+            initial={false}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ type: "spring", stiffness: 80, damping: 20 }}
             className="flex flex-col items-center"
@@ -528,7 +666,7 @@ export default function Home() {
 
           {/* Sidebar */}
           <motion.div
-            initial={{ opacity: 0, x: 20 }}
+            initial={false}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.1 }}
             className="space-y-4"
@@ -542,8 +680,54 @@ export default function Home() {
                 </h3>
               </div>
               <p className="text-white/30 font-body text-xs mb-3">
-                Select a badge to populate the wheel with all holder wallets
+                Pick one badge or randomize a 5-badge challenge. Any wallet with
+                at least one active badge becomes eligible for the raffle.
               </p>
+              <div className="mb-3 flex gap-2">
+                <button
+                  onClick={handleRandomizeBadgeSet}
+                  disabled={controlsLocked || supportedBadges.length < 5}
+                  className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-[#FFE048]/10 border border-[#FFE048]/20 px-3 py-2.5 text-[#FFE048] font-body text-xs hover:bg-[#FFE048]/15 transition-all disabled:opacity-30"
+                >
+                  <Shuffle size={13} />
+                  {activeBadgeIds.length > 1 ? "Reroll 5 Badges" : "Randomize 5 Badges"}
+                </button>
+              </div>
+              {activeBadgeDefs.length > 1 && (
+                <div className="mb-3 rounded-2xl border border-white/[0.08] bg-black/20 p-3">
+                  <p className="mb-2 text-[11px] uppercase tracking-[0.2em] text-white/30">
+                    Active Challenge
+                  </p>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {activeBadgeDefs.map((badge) => (
+                      <div
+                        key={badge.id}
+                        className="flex items-center gap-2 rounded-xl border border-white/[0.06] bg-white/[0.02] px-2.5 py-2"
+                      >
+                        <Image
+                          src={badge.image}
+                          alt=""
+                          width={28}
+                          height={28}
+                          className="h-7 w-7 rounded"
+                        />
+                        <span className="min-w-0 truncate text-xs text-white/80">
+                          {badge.name}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {activeBadgeDefs.some(
+                (badge) => badge.requirement?.type === "erc20_balance_range"
+              ) && (
+                <p className="mb-3 rounded-xl border border-[#FFE048]/15 bg-[#FFE048]/5 px-3 py-2 text-[11px] leading-relaxed text-[#FFE048]/80">
+                  VIBESTR-tier eligibility follows the GVC leaderboard, which can
+                  include linked wallets. Winner details will show whether the
+                  drawn address qualifies directly or through a connected wallet.
+                </p>
+              )}
 
               {/* Badge dropdown */}
               <div className="relative" ref={badgeDropdownRef}>
@@ -619,19 +803,29 @@ export default function Home() {
                             const tokenCount =
                               badgeMap?.badgeToTokens[badge.id]?.length || 0;
                             const strategy = badgeMap
-                              ? getBadgeStrategy(badge.id, badgeMap.badgeToTokens)
+                              ? getBadgeStrategy(
+                                  badge.id,
+                                  badgeMap.badgeToTokens,
+                                  badge
+                                )
                               : "token_map";
                             const strategyLabel =
                               strategy === "hkm_any" || strategy === "hkm_all"
                                 ? "ERC-1155"
                                 : strategy === "combo" || strategy === "multi_type"
                                   ? "Combo"
-                                  : strategy === "collector"
+                                  : badge.requirement?.type === "badge_count"
                                     ? "Milestone"
-                                    : strategy === "vibestr"
-                                      ? "VIBESTR"
-                                      : `${tokenCount} tokens`;
-                            const isUnavailable = strategy === "collector" || strategy === "vibestr";
+                                    : badge.requirement?.type === "manual_assignment"
+                                      ? "Earned"
+                                      : badge.requirement?.type?.startsWith("erc20")
+                                        ? "VIBESTR"
+                                        : strategy === "leaderboard"
+                                          ? "Leaderboard"
+                                          : strategy === "unsupported"
+                                            ? "Unavailable"
+                                            : `${tokenCount} tokens`;
+                            const isUnavailable = strategy === "unsupported";
                             return (
                               <button
                                 key={badge.id}
@@ -869,6 +1063,8 @@ export default function Home() {
       <WinnerDialog
         winner={winner}
         fullAddress={winnerAddress}
+        badgeMatches={winnerBadgeMatches}
+        activeBadgeCount={activeBadgeIds.length}
         onClose={handleClose}
         onRemove={handleRemove}
       />

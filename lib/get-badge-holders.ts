@@ -29,6 +29,50 @@ const ownerOfAbi = [
   },
 ] as const;
 
+const erc20BalanceOfAbi = [
+  {
+    inputs: [{ name: "account", type: "address" }],
+    name: "balanceOf",
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+] as const;
+
+function parseHumanToBaseUnits(amount: string, decimals: number): bigint {
+  const [intPart, fracPartRaw] = amount.split(".");
+  const fracPart = (fracPartRaw || "").slice(0, decimals);
+  const paddedFrac = fracPart.padEnd(decimals, "0");
+  const normalized = `${intPart}${paddedFrac}`.replace(/^0+(?=\d)/, "");
+  return BigInt(normalized.length ? normalized : "0");
+}
+
+function formatBaseUnits(
+  amount: bigint,
+  decimals: number,
+  maxFractionDigits = 4
+): string {
+  if (amount === 0n) return "0";
+
+  const negative = amount < 0n;
+  const absolute = negative ? -amount : amount;
+
+  if (decimals === 0) {
+    return `${negative ? "-" : ""}${absolute.toString()}`;
+  }
+
+  const raw = absolute.toString().padStart(decimals + 1, "0");
+  const integerPart = raw.slice(0, -decimals) || "0";
+  const fractionPart = raw
+    .slice(-decimals)
+    .slice(0, maxFractionDigits)
+    .replace(/0+$/, "");
+
+  return `${negative ? "-" : ""}${integerPart}${
+    fractionPart ? `.${fractionPart}` : ""
+  }`;
+}
+
 // ─── ERC-721 ownerOf multicall ──────────────────────────────────────────
 
 export async function getOwnersForTokens(
@@ -57,6 +101,83 @@ export async function getOwnersForTokens(
   }
 
   return owners;
+}
+
+// ─── ERC-20 balance lookup ──────────────────────────────────────────────
+
+export interface Erc20BalanceCheck {
+  address: string;
+  balanceRaw: string;
+  balanceDisplay: string;
+  qualifiesDirectly: boolean;
+}
+
+export async function getErc20BalanceChecks(
+  addresses: string[],
+  config: {
+    tokenAddress: `0x${string}`;
+    min: string;
+    decimals: number;
+    max?: string;
+  }
+): Promise<Erc20BalanceCheck[]> {
+  if (addresses.length === 0) return [];
+
+  const checks: Erc20BalanceCheck[] = [];
+  const BATCH = 200;
+  const minUnits = parseHumanToBaseUnits(config.min, config.decimals);
+  const maxUnits = config.max
+    ? parseHumanToBaseUnits(config.max, config.decimals)
+    : null;
+
+  for (let i = 0; i < addresses.length; i += BATCH) {
+    const batch = addresses.slice(i, i + BATCH);
+    const results = await client.multicall({
+      contracts: batch.map((address) => ({
+        address: config.tokenAddress,
+        abi: erc20BalanceOfAbi,
+        functionName: "balanceOf" as const,
+        args: [address as `0x${string}`],
+      })),
+    });
+
+    for (let index = 0; index < results.length; index += 1) {
+      const address = batch[index].toLowerCase();
+      const result = results[index];
+      const balance =
+        result.status === "success" && result.result !== undefined
+          ? (result.result as bigint)
+          : 0n;
+      const withinMin = balance >= minUnits;
+      const withinMax = maxUnits === null ? true : balance < maxUnits;
+
+      checks.push({
+        address,
+        balanceRaw: balance.toString(),
+        balanceDisplay: formatBaseUnits(balance, config.decimals),
+        qualifiesDirectly: withinMin && withinMax,
+      });
+    }
+  }
+
+  return checks;
+}
+
+// ─── ERC-20 holder filtering ────────────────────────────────────────────
+
+export async function filterAddressesByErc20Balance(
+  addresses: string[],
+  config: {
+    tokenAddress: `0x${string}`;
+    min: string;
+    decimals: number;
+    max?: string;
+  }
+): Promise<string[]> {
+  const checks = await getErc20BalanceChecks(addresses, config);
+  return checks
+    .filter((check) => check.qualifiesDirectly)
+    .map((check) => check.address);
 }
 
 // ─── ERC-1155 holder scanning (HighKey Moments) ─────────────────────────
@@ -258,9 +379,10 @@ export async function getComboBadgeHolders(
  */
 export async function getHoldersForBadge(
   badgeId: string,
-  badgeToTokens: Record<string, string[]>
+  badgeToTokens: Record<string, string[]>,
+  badgeDefinition?: { id?: string; badgeId?: string; requirement?: { type?: string } } | null
 ): Promise<string[]> {
-  const strategy = getBadgeStrategy(badgeId, badgeToTokens);
+  const strategy = getBadgeStrategy(badgeId, badgeToTokens, badgeDefinition);
 
   switch (strategy) {
     case "token_map": {
@@ -288,13 +410,12 @@ export async function getHoldersForBadge(
       }
       return result;
     }
-    case "collector":
-    case "vibestr":
+    case "leaderboard":
       throw new Error(
-        strategy === "collector"
-          ? "Collector milestone badges require per-wallet evaluation and can't be fetched globally"
-          : "VIBESTR tier badges require on-chain ERC-20 balance scanning (coming soon)"
+        `Badge "${badgeId}" should be loaded from the badge leaderboard`
       );
+    case "unsupported":
+      throw new Error(`Badge "${badgeId}" is not supported`);
   }
 }
 

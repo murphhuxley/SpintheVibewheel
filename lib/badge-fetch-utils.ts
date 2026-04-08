@@ -34,27 +34,41 @@ const VIBESTR_BADGES = new Set([
 
 const MULTI_TYPE_BADGE = "multi_type_master";
 
+export interface BadgeStrategyDefinition {
+  id?: string;
+  badgeId?: string;
+  requirement?: {
+    type?: string;
+  };
+}
+
 export type BadgeFetchStrategy =
   | "token_map"
   | "hkm_any"
   | "hkm_all"
   | "combo"
   | "multi_type"
-  | "collector"
-  | "vibestr";
+  | "leaderboard"
+  | "unsupported";
 
 export function getBadgeStrategy(
   badgeId: string,
-  badgeToTokens: Record<string, string[]>
+  badgeToTokens: Record<string, string[]>,
+  badgeDefinition?: BadgeStrategyDefinition | null
 ): BadgeFetchStrategy {
   if (badgeId === "highkeymoments_1") return "hkm_any";
   if (badgeId === "highkeymoments_2") return "hkm_all";
   if (COMBO_BADGES[badgeId]) return "combo";
-  if (COLLECTOR_BADGES.has(badgeId)) return "collector";
-  if (VIBESTR_BADGES.has(badgeId)) return "vibestr";
   if (badgeId === MULTI_TYPE_BADGE) return "multi_type";
   if (badgeToTokens[badgeId]?.length > 0) return "token_map";
-  return "collector";
+  if (
+    badgeDefinition ||
+    COLLECTOR_BADGES.has(badgeId) ||
+    VIBESTR_BADGES.has(badgeId)
+  ) {
+    return "leaderboard";
+  }
+  return "unsupported";
 }
 
 export function truncateAddress(addr: string): string {
