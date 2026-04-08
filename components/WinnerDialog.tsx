@@ -2,11 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { Copy, Check } from "lucide-react";
 
 const CONFETTI_COLORS = ["#FFE048", "#FF6B9D", "#8B5CF6", "#2EFF2E", "#FF5F1F", "#06B6D4", "#F97316"];
 
 interface Props {
   winner: string | null;
+  /** Full wallet address if available (for copy) */
+  fullAddress?: string | null;
   onClose: () => void;
   onRemove: () => void;
 }
@@ -20,11 +23,31 @@ interface ConfettiPiece {
   drift: number;
 }
 
-export default function WinnerDialog({ winner, onClose, onRemove }: Props) {
+export default function WinnerDialog({ winner, fullAddress, onClose, onRemove }: Props) {
   const [confetti, setConfetti] = useState<ConfettiPiece[]>([]);
+  const [copied, setCopied] = useState(false);
+
+  const copyValue = fullAddress || winner || "";
+
+  const handleCopy = async () => {
+    if (!copyValue) return;
+    try {
+      await navigator.clipboard.writeText(copyValue);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = copyValue;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   useEffect(() => {
     if (winner) {
+      setCopied(false);
       setConfetti(
         Array.from({ length: 70 }, () => ({
           x: Math.random() * 100,
@@ -85,9 +108,27 @@ export default function WinnerDialog({ winner, onClose, onRemove }: Props) {
             <p className="font-body text-white/50 text-sm uppercase tracking-widest mb-2">
               We have a winner!
             </p>
-            <h2 className="font-display text-3xl sm:text-4xl font-black text-shimmer mb-8 break-words leading-tight">
+            <h2 className="font-display text-3xl sm:text-4xl font-black text-shimmer mb-2 break-words leading-tight">
               {winner}
             </h2>
+            {fullAddress && fullAddress !== winner && (
+              <p className="font-mono text-white/40 text-xs mb-4 break-all">
+                {fullAddress}
+              </p>
+            )}
+            {(!fullAddress || fullAddress === winner) && <div className="mb-2" />}
+
+            <button
+              onClick={handleCopy}
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg mb-6 font-body text-xs transition-all active:scale-95 ${
+                copied
+                  ? "bg-[#2EFF2E]/10 border border-[#2EFF2E]/30 text-[#2EFF2E]"
+                  : "bg-white/[0.04] border border-white/[0.08] text-white/50 hover:border-[#FFE048]/20 hover:text-[#FFE048]"
+              }`}
+            >
+              {copied ? <Check size={13} /> : <Copy size={13} />}
+              {copied ? "Copied!" : "Copy Winner"}
+            </button>
 
             <div className="flex flex-col sm:flex-row gap-3">
               <button

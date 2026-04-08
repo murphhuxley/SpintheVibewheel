@@ -87,6 +87,8 @@ export default function Home() {
   const [badgeDropdownOpen, setBadgeDropdownOpen] = useState(false);
   const [badgeSearch, setBadgeSearch] = useState("");
   const [loadingBadge, setLoadingBadge] = useState(false);
+  // Map display name → full wallet address (for badge raffles)
+  const [addressMap, setAddressMap] = useState<Map<string, string>>(new Map());
 
   // Load badge data on mount
   useEffect(() => {
@@ -196,7 +198,10 @@ export default function Home() {
       const ownerMap = await getOwnersForTokens(tokenIds);
       const addresses = Array.from(ownerMap.keys());
 
-      // Show truncated addresses immediately
+      // Build display→address map and show truncated addresses immediately
+      const newMap = new Map<string, string>();
+      addresses.forEach((addr) => newMap.set(truncateAddress(addr), addr));
+      setAddressMap(newMap);
       setText(addresses.map(truncateAddress).join("\n"));
       toast.loading(
         `Found ${addresses.length} holders. Resolving names...`,
@@ -205,6 +210,12 @@ export default function Home() {
 
       // Resolve ENS/Twitter names in background
       const names = await resolveWalletNames(addresses);
+      const updatedMap = new Map<string, string>();
+      addresses.forEach((addr) => {
+        const displayName = names.get(addr) || truncateAddress(addr);
+        updatedMap.set(displayName, addr);
+      });
+      setAddressMap(updatedMap);
       setText(
         addresses
           .map((addr) => names.get(addr) || truncateAddress(addr))
@@ -650,6 +661,7 @@ export default function Home() {
       {/* Winner dialog */}
       <WinnerDialog
         winner={winner}
+        fullAddress={winner ? addressMap.get(winner) || null : null}
         onClose={handleClose}
         onRemove={handleRemove}
       />
