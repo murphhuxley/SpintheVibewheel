@@ -10,6 +10,7 @@ interface Props {
   winner: string | null;
   /** Full wallet address if available (for copy) */
   fullAddress?: string | null;
+  ensName?: string | null;
   badgeMatches?: Array<{
     badgeId: string;
     badgeName: string;
@@ -31,9 +32,28 @@ interface ConfettiPiece {
   drift: number;
 }
 
+function getWinnerHeadingClassName(winner: string | null) {
+  const length = winner?.trim().length ?? 0;
+
+  if (length >= 24) {
+    return "text-[1.9rem] sm:text-[2.7rem] leading-[0.92] tracking-tight";
+  }
+
+  if (length >= 18) {
+    return "text-[2.3rem] sm:text-[3.15rem] leading-[0.94] tracking-tight";
+  }
+
+  if (length >= 14) {
+    return "text-[2.7rem] sm:text-[3.6rem] leading-[0.96] tracking-tight";
+  }
+
+  return "text-3xl sm:text-4xl leading-tight";
+}
+
 export default function WinnerDialog({
   winner,
   fullAddress,
+  ensName,
   badgeMatches,
   activeBadgeCount = 0,
   onClose,
@@ -41,6 +61,9 @@ export default function WinnerDialog({
 }: Props) {
   const [confetti, setConfetti] = useState<ConfettiPiece[]>([]);
   const [copied, setCopied] = useState(false);
+  const [resolvedEnsName, setResolvedEnsName] = useState<string | null>(
+    ensName ?? null
+  );
   const cheerRef = useRef<HTMLAudioElement | null>(null);
   const yayRef = useRef<HTMLAudioElement | null>(null);
   const openSeaUrl =
@@ -50,6 +73,7 @@ export default function WinnerDialog({
   const directOrLinkedMatches = (badgeMatches || []).filter(
     (match) => match.qualificationType !== "standard"
   );
+  const winnerHeadingClassName = getWinnerHeadingClassName(winner);
 
   // Preload celebration sounds
   useEffect(() => {
@@ -58,6 +82,49 @@ export default function WinnerDialog({
     yayRef.current = new Audio("/yay.mp3");
     yayRef.current.preload = "auto";
   }, []);
+
+  useEffect(() => {
+    setResolvedEnsName(ensName ?? null);
+  }, [ensName, winner]);
+
+  useEffect(() => {
+    if (!winner || !fullAddress || !fullAddress.startsWith("0x") || ensName) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const lookupEnsName = async () => {
+      try {
+        const res = await fetch("/api/ens-name", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ address: fullAddress }),
+        });
+
+        if (!res.ok) return;
+
+        const data = (await res.json()) as { ensName?: unknown };
+        if (
+          !cancelled &&
+          typeof data.ensName === "string" &&
+          data.ensName.length > 0
+        ) {
+          setResolvedEnsName(data.ensName);
+        }
+      } catch {
+        // Ignore lookup failures and keep existing display.
+      }
+    };
+
+    void lookupEnsName();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [ensName, fullAddress, winner]);
 
   const copyValue = fullAddress || winner || "";
 
@@ -139,18 +206,25 @@ export default function WinnerDialog({
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.9, opacity: 0 }}
             transition={{ type: "spring", damping: 20, stiffness: 300 }}
-            className="relative z-10 bg-[#121212] border border-[#FFE048]/30 rounded-3xl p-8 sm:p-10 max-w-md w-full mx-4 text-center card-glow"
+            className="relative z-10 bg-[#121212] border border-[#FFE048]/30 rounded-3xl p-8 sm:p-10 max-w-xl w-full mx-4 text-center card-glow"
             onClick={(e) => e.stopPropagation()}
           >
             <p className="font-body text-white/50 text-sm uppercase tracking-widest mb-2">
               We have a winner!
             </p>
-            <h2 className="font-display text-3xl sm:text-4xl font-black text-shimmer mb-2 break-words leading-tight">
+            <h2
+              className={`font-display font-black text-shimmer mb-2 ${winnerHeadingClassName}`}
+            >
               {winner}
             </h2>
             {fullAddress && fullAddress !== winner && (
               <p className="font-mono text-white/40 text-xs mb-4 break-all">
                 {fullAddress}
+              </p>
+            )}
+            {resolvedEnsName && resolvedEnsName !== winner && (
+              <p className="mb-4 text-xs text-[#FFE048]/80 break-all">
+                ENS: {resolvedEnsName}
               </p>
             )}
             {badgeMatches && badgeMatches.length > 0 && (

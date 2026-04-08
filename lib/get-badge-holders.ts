@@ -1,6 +1,6 @@
 import "server-only";
 
-import { createPublicClient, http, parseAbiItem } from "viem";
+import { type Address, createPublicClient, http, parseAbiItem } from "viem";
 import { mainnet } from "viem/chains";
 
 import {
@@ -424,35 +424,113 @@ export async function getHoldersForBadge(
 export async function resolveWalletNames(
   addresses: string[]
 ): Promise<Map<string, string>> {
+  const displayData = await resolveWalletDisplayData(addresses);
   const names = new Map<string, string>();
+
+  for (const [address, data] of displayData.entries()) {
+    names.set(address, data.displayName);
+  }
+
+  return names;
+}
+
+export async function resolveWalletDisplayData(
+  addresses: string[]
+): Promise<Map<string, { displayName: string; ensName: string | null }>> {
+  const displayData = new Map<
+    string,
+    { displayName: string; ensName: string | null }
+  >();
   const BATCH = 10;
 
   for (let i = 0; i < addresses.length; i += BATCH) {
     const batch = addresses.slice(i, i + BATCH);
-    const results = await Promise.allSettled(
+    const apiResults = await Promise.allSettled(
       batch.map(async (addr) => {
         const res = await fetch(`${GVC_API}/wallet/${addr}`);
-        if (!res.ok) return { addr, name: null };
+        if (!res.ok) {
+          return {
+            addr,
+            apiEnsName: null,
+            fallbackDisplayName: null,
+          };
+        }
         const data = await res.json();
-        const name =
-          data.ensName || data.ens || data.twitter || data.twitterHandle || data.tag || null;
-        return { addr, name };
+        return {
+          addr,
+          apiEnsName: data.ensName || data.ens || null,
+          fallbackDisplayName:
+            data.twitter || data.twitterHandle || data.tag || null,
+        };
       })
     );
-
-    for (const result of results) {
-      if (result.status === "fulfilled" && result.value) {
-        const { addr, name } = result.value;
-        names.set(addr, name || truncateAddress(addr));
+    const apiData = new Map<
+      string,
+      {
+        apiEnsName: string | null;
+        fallbackDisplayName: string | null;
       }
+    >();
+
+    for (const result of apiResults) {
+      if (result.status === "fulfilled" && result.value) {
+        const { addr, apiEnsName, fallbackDisplayName } = result.value;
+        apiData.set(addr, {
+          apiEnsName,
+          fallbackDisplayName,
+        });
+      }
+    }
+
+    const missingEnsAddresses = batch.filter(
+      (addr) => !apiData.get(addr)?.apiEnsName
+    );
+    const ensFallbackResults = await Promise.allSettled(
+      missingEnsAddresses.map(async (addr) => ({
+        addr,
+        ensName: await resolveEnsNameOnChain(addr as Address),
+      }))
+    );
+    const ensFallbacks = new Map<string, string | null>();
+
+    for (const result of ensFallbackResults) {
+      if (result.status === "fulfilled" && result.value) {
+        ensFallbacks.set(result.value.addr, result.value.ensName);
+      }
+    }
+
+    for (const addr of batch) {
+      const apiEntry = apiData.get(addr);
+      const ensName = apiEntry?.apiEnsName ?? ensFallbacks.get(addr) ?? null;
+      const displayName =
+        ensName ?? apiEntry?.fallbackDisplayName ?? truncateAddress(addr);
+
+      displayData.set(addr, {
+        displayName,
+        ensName,
+      });
     }
   }
 
   for (const addr of addresses) {
-    if (!names.has(addr)) {
-      names.set(addr, truncateAddress(addr));
+    if (!displayData.has(addr)) {
+      const fallbackName = truncateAddress(addr);
+      displayData.set(addr, {
+        displayName: fallbackName,
+        ensName: null,
+      });
     }
   }
 
-  return names;
+  return displayData;
+}
+
+export async function resolveEnsNameOnChain(
+  address: Address
+): Promise<string | null> {
+  try {
+    return await client.getEnsName({ address });
+  } catch {
+    return null;
+  }
 }

@@ -10,7 +10,7 @@ import { getBadgeLeaderboard } from "@/lib/gvc-api";
 import {
   getErc20BalanceChecks,
   getHoldersForBadge,
-  resolveWalletNames,
+  resolveWalletDisplayData,
 } from "@/lib/get-badge-holders";
 
 export const runtime = "nodejs";
@@ -37,6 +37,7 @@ type BadgeHolderResponse = {
   addresses: string[];
   entries: string[];
   badgeMatchesByAddress?: Record<string, BadgeMatchInfo[]>;
+  ensByAddress?: Record<string, string>;
 };
 
 async function loadAddressesForBadge(
@@ -206,13 +207,20 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const names = await resolveWalletNames(addresses);
+    const walletDisplayData = await resolveWalletDisplayData(addresses);
     const response: BadgeHolderResponse = {
       addresses,
       entries: addresses.map(
-        (address) => names.get(address) ?? truncateAddress(address)
+        (address) =>
+          walletDisplayData.get(address)?.displayName ?? truncateAddress(address)
       ),
       badgeMatchesByAddress,
+      ensByAddress: Object.fromEntries(
+        addresses.flatMap((address) => {
+          const ensName = walletDisplayData.get(address)?.ensName;
+          return ensName ? [[address, ensName]] : [];
+        })
+      ),
     };
 
     return NextResponse.json(response, {

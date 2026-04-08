@@ -14,7 +14,6 @@ import {
   Award,
   Loader2,
   ChevronDown,
-  History,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import Wheel from "@/components/Wheel";
@@ -35,21 +34,13 @@ const DEFAULT_NAMES = [
 ];
 
 const STORAGE_KEY = "vibewheel:lists";
-const CHALLENGE_HISTORY_KEY = "vibewheel:challenge-history";
-const MAX_CHALLENGE_HISTORY = 12;
+const RANDOM_BADGE_EXCLUSIONS = new Set(["any_gvc"]);
 
 interface SavedList {
   name: string;
   entries: string[];
   savedAt: number;
   entryAddresses?: Array<string | null>;
-}
-
-interface ChallengeHistoryEntry {
-  id: string;
-  badgeIds: string[];
-  createdAt: number;
-  entryCount: number;
 }
 
 interface BadgeDef {
@@ -82,6 +73,7 @@ interface BadgeHoldersResponse {
       minimumRequired?: string;
     }>
   >;
+  ensByAddress?: Record<string, string>;
 }
 
 interface BadgeMatchInfo {
@@ -161,58 +153,6 @@ function persistLists(lists: SavedList[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(lists));
 }
 
-function loadChallengeHistory(): ChallengeHistoryEntry[] {
-  try {
-    const raw = localStorage.getItem(CHALLENGE_HISTORY_KEY);
-    if (!raw) return [];
-
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-
-    return parsed.flatMap((item) => {
-      if (!item || typeof item !== "object") return [];
-      const record = item as {
-        id?: unknown;
-        badgeIds?: unknown;
-        createdAt?: unknown;
-        entryCount?: unknown;
-      };
-
-      const id = typeof record.id === "string" ? record.id : "";
-      const badgeIds = Array.isArray(record.badgeIds)
-        ? record.badgeIds.filter(
-            (badgeId: unknown): badgeId is string => typeof badgeId === "string"
-          )
-        : [];
-
-      if (!id || badgeIds.length === 0) return [];
-
-      return [
-        {
-          id,
-          badgeIds,
-          createdAt:
-            typeof record.createdAt === "number"
-              ? record.createdAt
-              : Date.now(),
-          entryCount:
-            typeof record.entryCount === "number" ? record.entryCount : 0,
-        } satisfies ChallengeHistoryEntry,
-      ];
-    });
-  } catch {
-    return [];
-  }
-}
-
-function persistChallengeHistory(history: ChallengeHistoryEntry[]) {
-  localStorage.setItem(CHALLENGE_HISTORY_KEY, JSON.stringify(history));
-}
-
-function createChallengeHistoryId() {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
 function pickRandomItems<T>(items: T[], count: number): T[] {
   const pool = [...items];
 
@@ -230,12 +170,6 @@ export default function Home() {
   const [winnerIdx, setWinnerIdx] = useState(-1);
   const [isSpinning, setIsSpinning] = useState(false);
   const [savedLists, setSavedLists] = useState<SavedList[]>([]);
-  const [challengeHistory, setChallengeHistory] = useState<
-    ChallengeHistoryEntry[]
-  >([]);
-  const [activeChallengeHistoryId, setActiveChallengeHistoryId] = useState<
-    string | null
-  >(null);
   const [showSaveInput, setShowSaveInput] = useState(false);
   const [showLoadPanel, setShowLoadPanel] = useState(false);
   const [saveName, setSaveName] = useState("");
@@ -246,16 +180,22 @@ export default function Home() {
   const [badgeMap, setBadgeMap] = useState<BadgeTokenMap | null>(null);
   const [selectedBadge, setSelectedBadge] = useState<string | null>(null);
   const [activeBadgeIds, setActiveBadgeIds] = useState<string[]>([]);
+  const [badgeDrawBadges, setBadgeDrawBadges] = useState<BadgeDef[] | null>(
+    null
+  );
   const [badgeDropdownOpen, setBadgeDropdownOpen] = useState(false);
   const [badgeSearch, setBadgeSearch] = useState("");
   const [loadingBadge, setLoadingBadge] = useState(false);
   const [entryAddresses, setEntryAddresses] = useState<Array<string | null>>(
     () => alignEntryAddresses(DEFAULT_NAMES.length)
   );
+  const [ensByAddress, setEnsByAddress] = useState<Record<string, string>>({});
   const [badgeMatchesByAddress, setBadgeMatchesByAddress] = useState<
     Record<string, BadgeMatchInfo[]>
   >({});
   const badgeLoadRequestRef = useRef(0);
+  const isSpinningRef = useRef(false);
+  const loadingBadgeRef = useRef(false);
 
   // Load badge data on mount
   useEffect(() => {
@@ -272,11 +212,19 @@ export default function Home() {
   // Load saved lists on mount
   useEffect(() => {
     setSavedLists(loadSavedLists());
-    setChallengeHistory(loadChallengeHistory());
   }, []);
 
   const entries = parseEntries(text);
   const controlsLocked = isSpinning || loadingBadge;
+  const isBadgeDrawMode = (badgeDrawBadges?.length ?? 0) > 0;
+
+  useEffect(() => {
+    isSpinningRef.current = isSpinning;
+  }, [isSpinning]);
+
+  useEffect(() => {
+    loadingBadgeRef.current = loadingBadge;
+  }, [loadingBadge]);
 
   // Filtered badges for search
   const filteredBadges = useMemo(() => {
@@ -292,6 +240,7 @@ export default function Home() {
 
     return badges.filter((badge) => {
       if (badge.enabled === false) return false;
+      if (RANDOM_BADGE_EXCLUSIONS.has(badge.id)) return false;
       return (
         getBadgeStrategy(badge.id, badgeMap.badgeToTokens, badge) !==
         "unsupported"
@@ -306,16 +255,9 @@ export default function Home() {
       .map((badgeId) => badgeLookup.get(badgeId))
       .filter((badge): badge is BadgeDef => Boolean(badge));
   }, [activeBadgeIds, badges]);
-  const formatChallengeTimestamp = useCallback((value: number) => {
-    return new Date(value).toLocaleString([], {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  }, []);
 
   const handleSpinStart = useCallback(() => {
+    isSpinningRef.current = true;
     setIsSpinning(true);
     setBadgeDropdownOpen(false);
     setBadgeSearch("");
@@ -323,14 +265,9 @@ export default function Home() {
     setShowSaveInput(false);
   }, []);
 
-  const handleSpinEnd = useCallback((name: string, index: number) => {
-    setWinner(name);
-    setWinnerIdx(index);
-    setIsSpinning(false);
-  }, []);
-
   const invalidateBadgeLoad = useCallback(() => {
     badgeLoadRequestRef.current += 1;
+    loadingBadgeRef.current = false;
     setLoadingBadge(false);
     toast.dismiss("badge-load");
   }, []);
@@ -348,20 +285,22 @@ export default function Home() {
         invalidateBadgeLoad();
       }
 
-      if (selectedBadge || activeBadgeIds.length > 0) {
+      if (selectedBadge || activeBadgeIds.length > 0 || badgeDrawBadges) {
         setSelectedBadge(null);
         setActiveListName(null);
       }
 
       resetWinner();
+      setBadgeDrawBadges(null);
       setEntryAddresses([]);
-      setActiveChallengeHistoryId(null);
+      setEnsByAddress({});
       setActiveBadgeIds([]);
       setBadgeMatchesByAddress({});
       setText(value);
     },
     [
       activeBadgeIds.length,
+      badgeDrawBadges,
       invalidateBadgeLoad,
       loadingBadge,
       resetWinner,
@@ -416,9 +355,10 @@ export default function Home() {
   const reset = () => {
     invalidateBadgeLoad();
     resetWinner();
+    setBadgeDrawBadges(null);
     setText(DEFAULT_NAMES.join("\n"));
     setEntryAddresses(alignEntryAddresses(DEFAULT_NAMES.length));
-    setActiveChallengeHistoryId(null);
+    setEnsByAddress({});
     setActiveBadgeIds([]);
     setBadgeMatchesByAddress({});
     setActiveListName(null);
@@ -434,15 +374,22 @@ export default function Home() {
       loadingLabel: string;
       activeName: string;
       successName: string;
-      activeHistoryId?: string | null;
     }
   ): Promise<{ entryCount: number } | null> => {
-    if (!badgeMap || controlsLocked || badgeIds.length === 0) return null;
+    if (
+      !badgeMap ||
+      isSpinningRef.current ||
+      loadingBadgeRef.current ||
+      badgeIds.length === 0
+    ) {
+      return null;
+    }
 
     setBadgeDropdownOpen(false);
     setBadgeSearch("");
     setShowLoadPanel(false);
     setShowSaveInput(false);
+    loadingBadgeRef.current = true;
     setLoadingBadge(true);
     resetWinner();
 
@@ -466,7 +413,7 @@ export default function Home() {
       const data = (await res.json()) as BadgeHoldersResponse & {
         error?: unknown;
       };
-      if (requestId !== badgeLoadRequestRef.current) return;
+      if (requestId !== badgeLoadRequestRef.current) return null;
 
       if (!res.ok) {
         throw new Error(
@@ -487,6 +434,18 @@ export default function Home() {
 
       const addresses = data.addresses;
       const loadedEntries = data.entries;
+      const loadedEnsByAddress =
+        data.ensByAddress &&
+        typeof data.ensByAddress === "object" &&
+        !Array.isArray(data.ensByAddress)
+          ? Object.fromEntries(
+              Object.entries(data.ensByAddress).flatMap(([address, ensName]) =>
+                typeof ensName === "string" && ensName
+                  ? [[address.toLowerCase(), ensName]]
+                  : []
+              )
+            )
+          : {};
       const loadedBadgeMatches =
         data.badgeMatchesByAddress &&
         typeof data.badgeMatchesByAddress === "object" &&
@@ -522,6 +481,7 @@ export default function Home() {
 
       if (addresses.length === 0) {
         toast.error("No holders found for this badge", { id: "badge-load" });
+        loadingBadgeRef.current = false;
         setLoadingBadge(false);
         return null;
       }
@@ -531,10 +491,10 @@ export default function Home() {
       }
 
       setEntryAddresses(alignEntryAddresses(loadedEntries.length, addresses));
+      setEnsByAddress(loadedEnsByAddress);
       setBadgeMatchesByAddress(loadedBadgeMatches);
       setText(loadedEntries.join("\n"));
       setSelectedBadge(options.singleBadgeId);
-      setActiveChallengeHistoryId(options.activeHistoryId ?? null);
       setActiveBadgeIds(badgeIds);
       setActiveListName(options.activeName);
       toast.success(
@@ -543,17 +503,54 @@ export default function Home() {
       );
       return { entryCount: addresses.length };
     } catch (err) {
-      if (requestId !== badgeLoadRequestRef.current) return;
+      if (requestId !== badgeLoadRequestRef.current) return null;
       console.error(err);
       const msg = err instanceof Error ? err.message : "Failed to fetch holders";
       toast.error(msg, { id: "badge-load" });
     } finally {
       if (requestId === badgeLoadRequestRef.current) {
+        loadingBadgeRef.current = false;
         setLoadingBadge(false);
       }
     }
     return null;
-  }, [badgeMap, controlsLocked, resetWinner]);
+  }, [badgeMap, resetWinner]);
+
+  const handleSpinEnd = useCallback((name: string, index: number) => {
+    isSpinningRef.current = false;
+    setIsSpinning(false);
+
+    if (badgeDrawBadges && badgeDrawBadges.length > 0) {
+      const currentBadgeDrawBadges = badgeDrawBadges;
+      const drawnBadge =
+        currentBadgeDrawBadges.find((badge) => badge.name === name) ??
+        currentBadgeDrawBadges[index] ??
+        null;
+
+      if (!drawnBadge) {
+        toast.error("Could not resolve the drawn badge");
+        return;
+      }
+
+      setBadgeDrawBadges(null);
+      void (async () => {
+        const result = await loadBadgeEntries([drawnBadge.id], {
+          singleBadgeId: drawnBadge.id,
+          loadingLabel: `Drawn badge: ${drawnBadge.name}. Loading holders...`,
+          activeName: drawnBadge.name,
+          successName: `"${drawnBadge.name}"`,
+        });
+
+        if (!result) {
+          setBadgeDrawBadges(currentBadgeDrawBadges);
+        }
+      })();
+      return;
+    }
+
+    setWinner(name);
+    setWinnerIdx(index);
+  }, [badgeDrawBadges, loadBadgeEntries]);
 
   // Badge selection handler
   const handleBadgeSelect = async (badgeId: string) => {
@@ -566,6 +563,8 @@ export default function Home() {
       toast.error("That badge isn't supported yet");
       return;
     }
+
+    setBadgeDrawBadges(null);
 
     const loadingLabel = strategy === "hkm_any" || strategy === "hkm_all"
       ? "Loading HighKey Moments holders..."
@@ -591,6 +590,7 @@ export default function Home() {
       return;
     }
 
+    setBadgeDrawBadges(null);
     const chosenBadges = pickRandomItems(supportedBadges, 5);
     const chosenIds = chosenBadges.map((badge) => badge.id);
 
@@ -600,6 +600,32 @@ export default function Home() {
       activeName: "Random 5 Badge Challenge",
       successName: "your 5-badge challenge",
     });
+  };
+
+  const handleRandomBadgeDraw = () => {
+    if (controlsLocked || supportedBadges.length < 2) {
+      if (supportedBadges.length < 2) {
+        toast.error("Need at least 2 supported badges to spin a badge draw");
+      }
+      return;
+    }
+
+    resetWinner();
+    setBadgeDrawBadges(supportedBadges);
+    setSelectedBadge(null);
+    setActiveBadgeIds([]);
+    setBadgeMatchesByAddress({});
+    setEnsByAddress({});
+    setActiveListName("Random Badge Draw");
+    setBadgeDropdownOpen(false);
+    setBadgeSearch("");
+    setShowLoadPanel(false);
+    setShowSaveInput(false);
+    setEntryAddresses(alignEntryAddresses(supportedBadges.length));
+    setText(supportedBadges.map((badge) => badge.name).join("\n"));
+    toast.success(
+      `Loaded ${supportedBadges.length} badges onto the wheel. Spin to draw one.`
+    );
   };
 
   // Save list
@@ -634,10 +660,12 @@ export default function Home() {
 
     invalidateBadgeLoad();
     resetWinner();
+    setBadgeDrawBadges(null);
     setText(list.entries.join("\n"));
     setEntryAddresses(
       alignEntryAddresses(list.entries.length, list.entryAddresses)
     );
+    setEnsByAddress({});
     setActiveBadgeIds([]);
     setBadgeMatchesByAddress({});
     setActiveListName(list.name);
@@ -687,6 +715,10 @@ export default function Home() {
 
   const winnerAddress =
     winnerIdx >= 0 ? entryAddresses[winnerIdx] ?? null : null;
+  const winnerEnsName =
+    winnerAddress && ensByAddress
+      ? ensByAddress[winnerAddress.toLowerCase()] ?? null
+      : null;
   const winnerBadgeMatches =
     winnerAddress && badgeMatchesByAddress
       ? badgeMatchesByAddress[winnerAddress.toLowerCase()] ?? []
@@ -747,7 +779,9 @@ export default function Home() {
             <p className="mt-3 text-white/25 font-body text-xs">
               {loadingBadge
                 ? "Loading badge holders..."
-                : entries.length >= 2
+                : isBadgeDrawMode
+                  ? "Spin the wheel to draw a badge"
+                  : entries.length >= 2
                   ? "Click the wheel to spin"
                   : "Add at least 2 names to spin"}
             </p>
@@ -769,10 +803,19 @@ export default function Home() {
                 </h3>
               </div>
               <p className="text-white/30 font-body text-xs mb-3">
-                Pick one badge or randomize a 5-badge challenge. Any wallet with
-                at least one active badge becomes eligible for the raffle.
+                Pick one badge, spin for a random badge draw, or randomize a
+                5-badge challenge. Any wallet with at least one active badge
+                becomes eligible for the raffle.
               </p>
               <div className="mb-3 flex gap-2">
+                <button
+                  onClick={handleRandomBadgeDraw}
+                  disabled={controlsLocked || supportedBadges.length < 2}
+                  className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-white/[0.04] border border-white/[0.08] px-3 py-2.5 text-white/70 font-body text-xs hover:border-[#FFE048]/20 hover:text-[#FFE048] transition-all disabled:opacity-30"
+                >
+                  <Award size={13} />
+                  {isBadgeDrawMode ? "Reload Badge Wheel" : "Random Badge Draw"}
+                </button>
                 <button
                   onClick={handleRandomizeBadgeSet}
                   disabled={controlsLocked || supportedBadges.length < 5}
@@ -782,6 +825,18 @@ export default function Home() {
                   {activeBadgeIds.length > 1 ? "Reroll 5 Badges" : "Randomize 5 Badges"}
                 </button>
               </div>
+              {isBadgeDrawMode && (
+                <div className="mb-3 rounded-2xl border border-[#FFE048]/15 bg-[#FFE048]/5 px-3 py-2.5">
+                  <p className="text-[11px] uppercase tracking-[0.2em] text-[#FFE048]/60">
+                    Badge Wheel Ready
+                  </p>
+                  <p className="mt-1 text-xs leading-relaxed text-white/65">
+                    Spin to draw 1 of {supportedBadges.length} eligible badges.
+                    Once it lands, that badge will be selected automatically
+                    and its holders will populate the entries.
+                  </p>
+                </div>
+              )}
               {activeBadgeDefs.length > 1 && (
                 <div className="mb-3 rounded-2xl border border-white/[0.08] bg-black/20 p-3">
                   <p className="mb-2 text-[11px] uppercase tracking-[0.2em] text-white/30">
@@ -967,7 +1022,14 @@ export default function Home() {
                   )}
                 </div>
                 <span className="text-white/40 font-body text-sm tabular-nums">
-                  {entries.length} {entries.length === 1 ? "name" : "names"}
+                  {entries.length}{" "}
+                  {isBadgeDrawMode
+                    ? entries.length === 1
+                      ? "badge"
+                      : "badges"
+                    : entries.length === 1
+                      ? "name"
+                      : "names"}
                 </span>
               </div>
 
@@ -1152,6 +1214,7 @@ export default function Home() {
       <WinnerDialog
         winner={winner}
         fullAddress={winnerAddress}
+        ensName={winnerEnsName}
         badgeMatches={winnerBadgeMatches}
         activeBadgeCount={activeBadgeIds.length}
         onClose={handleClose}
