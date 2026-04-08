@@ -271,7 +271,7 @@ export default function Home() {
         invalidateBadgeLoad();
       }
 
-      if (selectedBadge) {
+      if (selectedBadge || activeBadgeIds.length > 0) {
         setSelectedBadge(null);
         setActiveListName(null);
       }
@@ -282,7 +282,13 @@ export default function Home() {
       setBadgeMatchesByAddress({});
       setText(value);
     },
-    [invalidateBadgeLoad, loadingBadge, resetWinner, selectedBadge]
+    [
+      activeBadgeIds.length,
+      invalidateBadgeLoad,
+      loadingBadge,
+      resetWinner,
+      selectedBadge,
+    ]
   );
 
   const handleRemove = () => {
