@@ -298,18 +298,28 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled, cente
       ctx.restore();
 
       if (hasBadgeImg) {
-        // Smoothly animate hover scale
-        const targetScale = isHoveringRef.current ? 1.12 : 1;
-        hoverScaleRef.current += (targetScale - hoverScaleRef.current) * 0.15;
+        // Ease in/out hover scale — slow lerp for buttery animation
+        const targetScale = isHoveringRef.current ? 1.15 : 1;
+        const diff = targetScale - hoverScaleRef.current;
+        // Slower near target (ease-out feel), faster when far (ease-in feel)
+        const speed = 0.04 + Math.abs(diff) * 0.06;
+        hoverScaleRef.current += diff * speed;
+        // Snap when close enough
+        if (Math.abs(diff) < 0.001) hoverScaleRef.current = targetScale;
+
         const s = hoverScaleRef.current;
         const scaledR = hubR * s;
 
-        // Draw badge image clipped to circle with glow on hover
+        // Interpolate shadow: blend from drop shadow to gold glow based on scale progress
+        const t = (s - 1) / 0.15; // 0 at rest, 1 at full hover
+        const glowAlpha = Math.max(0, Math.min(1, t));
+        const shadowAlpha = 1 - glowAlpha;
+
+        // Combined shadow: dark base + gold glow that fades in
         ctx.save();
-        ctx.shadowColor = isHoveringRef.current
-          ? "rgba(255, 224, 72, 0.4)"
-          : "rgba(0, 0, 0, 0.6)";
-        ctx.shadowBlur = isHoveringRef.current ? 20 : 12;
+        ctx.shadowColor = `rgba(255, 224, 72, ${(0.4 * glowAlpha).toFixed(2)})`;
+        ctx.shadowBlur = 12 + glowAlpha * 10;
+        ctx.shadowOffsetY = shadowAlpha * 3;
         ctx.beginPath();
         ctx.arc(0, 0, scaledR, 0, 2 * Math.PI);
         ctx.fillStyle = "#0a0a0a";
