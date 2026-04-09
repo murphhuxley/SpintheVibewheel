@@ -282,17 +282,18 @@ export default function Home() {
     void Promise.all(
       audioElements.map(async ({ audio, volume }) => {
         try {
+          audio.pause();
+          audio.defaultMuted = true;
           audio.volume = volume;
           audio.muted = true;
           audio.currentTime = 0;
           await audio.play();
           audio.pause();
           audio.currentTime = 0;
-          audio.muted = false;
-          audio.volume = volume;
           return true;
         } catch {
-          audio.muted = false;
+          audio.defaultMuted = true;
+          audio.muted = true;
           audio.volume = volume;
           return false;
         }
@@ -319,7 +320,9 @@ export default function Home() {
       try {
         audio.pause();
         audio.currentTime = 0;
+        audio.defaultMuted = false;
         audio.volume = volume;
+        audio.muted = false;
         void audio.play().catch(() => {});
       } catch {
         // Ignore playback failures and keep the UI responsive.
