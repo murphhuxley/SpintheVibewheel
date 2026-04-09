@@ -496,7 +496,7 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled, cente
   }, [animateSpin, disabled, playSpinSound]);
 
   return (
-    <div className="relative w-full aspect-square max-w-[560px] lg:max-w-[600px] xl:max-w-[640px] 2xl:max-w-[900px] mx-auto select-none">
+    <div className="relative aspect-square w-full max-w-[520px] lg:w-[min(100%,60vh)] xl:w-[min(100%,56vh)] 2xl:w-[min(100%,70vh)] lg:max-w-none mx-auto select-none">
       {/* Pointer — 3D gold arrow with bounce */}
       <div
         className="absolute top-0 left-1/2 z-10 pointer-events-none animate-pointer-bounce"
