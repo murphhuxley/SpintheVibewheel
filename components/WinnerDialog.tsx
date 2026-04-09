@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Copy, Check, ExternalLink } from "lucide-react";
 
@@ -66,8 +66,6 @@ export default function WinnerDialog({
   const [resolvedEnsName, setResolvedEnsName] = useState<string | null>(
     ensName ?? null
   );
-  const cheerRef = useRef<HTMLAudioElement | null>(null);
-  const yayRef = useRef<HTMLAudioElement | null>(null);
   const openSeaUrl =
     fullAddress && fullAddress.startsWith("0x")
       ? `https://opensea.io/${encodeURIComponent(fullAddress)}`
@@ -77,13 +75,6 @@ export default function WinnerDialog({
   );
   const winnerHeadingClassName = getWinnerHeadingClassName(winner);
 
-  // Preload celebration sounds
-  useEffect(() => {
-    cheerRef.current = new Audio("/cheer.mp3");
-    cheerRef.current.preload = "auto";
-    yayRef.current = new Audio("/yay.mp3");
-    yayRef.current.preload = "auto";
-  }, []);
 
   useEffect(() => {
     setResolvedEnsName(ensName ?? null);
@@ -149,11 +140,7 @@ export default function WinnerDialog({
   useEffect(() => {
     if (winner) {
       setCopied(false);
-      // Play celebration sounds
-      try {
-        if (cheerRef.current) { cheerRef.current.currentTime = 0; cheerRef.current.play().catch(() => {}); }
-        if (yayRef.current) { yayRef.current.currentTime = 0; yayRef.current.play().catch(() => {}); }
-      } catch { /* audio blocked */ }
+      // Celebration sounds now handled by Wheel component (chained off spin audio end)
       setConfetti(
         Array.from({ length: 70 }, () => ({
           x: Math.random() * 100,

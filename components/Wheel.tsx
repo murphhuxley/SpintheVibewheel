@@ -69,22 +69,49 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled, cente
     img.src = centerImageUrl;
   }, [centerImageUrl]);
 
-  // Preload spin sound
+  const cheerAudio = useRef<HTMLAudioElement | null>(null);
+  const yayAudio = useRef<HTMLAudioElement | null>(null);
+
+  // Preload all sounds
   useEffect(() => {
-    const audio = new Audio("/wheel-tick.mp3");
-    audio.preload = "auto";
+    const spin = new Audio("/wheel-tick.mp3");
+    spin.preload = "auto";
     const updateDuration = () => {
-      if (Number.isFinite(audio.duration) && audio.duration > 0) {
-        spinDurationMsRef.current = Math.round(audio.duration * 1000);
+      if (Number.isFinite(spin.duration) && spin.duration > 0) {
+        spinDurationMsRef.current = Math.round(spin.duration * 1000);
       }
     };
+    spin.addEventListener("loadedmetadata", updateDuration);
+    spinAudio.current = spin;
 
-    audio.addEventListener("loadedmetadata", updateDuration);
-    spinAudio.current = audio;
+    const cheer = new Audio("/cheer.mp3");
+    cheer.preload = "auto";
+    cheerAudio.current = cheer;
+
+    const yay = new Audio("/yay.mp3");
+    yay.preload = "auto";
+    yayAudio.current = yay;
+
+    // Chain celebration sounds to play after spin ends
+    const onSpinEnded = () => {
+      setTimeout(() => {
+        try {
+          if (cheerAudio.current) { cheerAudio.current.currentTime = 0; cheerAudio.current.play().catch(() => {}); }
+          if (yayAudio.current) { yayAudio.current.currentTime = 0; yayAudio.current.play().catch(() => {}); }
+        } catch {}
+      }, 200);
+    };
+    spin.addEventListener("ended", onSpinEnded);
+
     return () => {
-      audio.removeEventListener("loadedmetadata", updateDuration);
-      audio.pause();
+      spin.removeEventListener("loadedmetadata", updateDuration);
+      spin.removeEventListener("ended", onSpinEnded);
+      spin.pause();
       spinAudio.current = null;
+      cheer.pause();
+      cheerAudio.current = null;
+      yay.pause();
+      yayAudio.current = null;
     };
   }, []);
 
@@ -469,7 +496,7 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled, cente
   }, [animateSpin, disabled, playSpinSound]);
 
   return (
-    <div className="relative w-full aspect-square max-w-[640px] xl:max-w-[720px] 2xl:max-w-[940px] mx-auto select-none">
+    <div className="relative w-full aspect-square max-w-[560px] lg:max-w-[600px] xl:max-w-[640px] 2xl:max-w-[900px] mx-auto select-none">
       {/* Pointer — 3D gold arrow with bounce */}
       <div
         className="absolute top-0 left-1/2 z-10 pointer-events-none animate-pointer-bounce"
