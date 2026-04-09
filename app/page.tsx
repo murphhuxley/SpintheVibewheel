@@ -739,6 +739,8 @@ export default function Home() {
     winnerAddress && badgeMatchesByAddress
       ? badgeMatchesByAddress[winnerAddress.toLowerCase()] ?? []
       : null;
+  const stageGridClassName =
+    "grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1.15fr)_400px] 2xl:grid-cols-[minmax(0,1.22fr)_440px] gap-8 xl:gap-10 2xl:gap-14";
 
   return (
     <main className="min-h-screen relative overflow-hidden flex flex-col">
@@ -763,22 +765,25 @@ export default function Home() {
         <motion.header
           initial={false}
           animate={{ opacity: 1, y: 0 }}
-          className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3 mb-6 xl:mb-8"
+          className={`${stageGridClassName} items-center mb-6 xl:mb-8`}
         >
-          <Image
-            src="/shaka.png"
-            alt="GVC"
-            width={44}
-            height={44}
-            className="h-11 w-11 xl:h-12 xl:w-12 2xl:h-14 2xl:w-14 drop-shadow-[0_0_12px_rgba(255,224,72,0.3)]"
-          />
-          <h1 className="font-display font-black text-3xl sm:text-5xl xl:text-6xl 2xl:text-7xl text-shimmer uppercase text-center">
-            WHEEL OF VIBES
-          </h1>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3 min-w-0">
+            <Image
+              src="/shaka.png"
+              alt="GVC"
+              width={44}
+              height={44}
+              className="h-11 w-11 xl:h-12 xl:w-12 2xl:h-14 2xl:w-14 drop-shadow-[0_0_12px_rgba(255,224,72,0.3)]"
+            />
+            <h1 className="font-display font-black text-3xl sm:text-5xl xl:text-6xl 2xl:text-7xl text-shimmer uppercase text-center">
+              WHEEL OF VIBES
+            </h1>
+          </div>
+          <div className="hidden lg:block" aria-hidden />
         </motion.header>
 
         {/* Main layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1.15fr)_400px] 2xl:grid-cols-[minmax(0,1.22fr)_440px] gap-8 xl:gap-10 2xl:gap-14 items-start">
+        <div className={`${stageGridClassName} items-start`}>
           {/* Wheel panel */}
           <motion.div
             initial={false}
@@ -1236,6 +1241,7 @@ export default function Home() {
         winner={winner}
         fullAddress={winnerAddress}
         ensName={winnerEnsName}
+        alignToWheel
         badgeMatches={winnerBadgeMatches}
         activeBadgeCount={activeBadgeIds.length}
         onClose={handleClose}
