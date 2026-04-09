@@ -509,22 +509,35 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled, cente
       <canvas
         ref={canvasRef}
         onClick={handleClick}
-        onMouseEnter={() => {
-          isHoveringRef.current = true;
-          // Kick off animation frames for smooth badge scale
-          const animateHover = () => {
-            drawWheelRef.current();
-            if (isHoveringRef.current && Math.abs(hoverScaleRef.current - 1.12) > 0.002) {
-              requestAnimationFrame(animateHover);
-            }
-          };
-          requestAnimationFrame(animateHover);
+        onMouseMove={(e) => {
+          if (!centerImageRef.current?.complete) return;
+          const rect = e.currentTarget.getBoundingClientRect();
+          const cx = rect.width / 2;
+          const cy = rect.height / 2;
+          const mx = e.clientX - rect.left;
+          const my = e.clientY - rect.top;
+          const dist = Math.sqrt((mx - cx) ** 2 + (my - cy) ** 2);
+          const radius = Math.min(cx, cy) - 10;
+          const hubR = Math.max(28, Math.min(48, radius * 0.17));
+          const wasHovering = isHoveringRef.current;
+          isHoveringRef.current = dist <= hubR * 1.2;
+          if (isHoveringRef.current !== wasHovering) {
+            const animate = () => {
+              drawWheelRef.current();
+              const target = isHoveringRef.current ? 1.12 : 1;
+              if (Math.abs(hoverScaleRef.current - target) > 0.002) {
+                requestAnimationFrame(animate);
+              }
+            };
+            requestAnimationFrame(animate);
+          }
         }}
         onMouseLeave={() => {
+          if (!isHoveringRef.current) return;
           isHoveringRef.current = false;
           const animateOut = () => {
             drawWheelRef.current();
-            if (!isHoveringRef.current && Math.abs(hoverScaleRef.current - 1) > 0.002) {
+            if (Math.abs(hoverScaleRef.current - 1) > 0.002) {
               requestAnimationFrame(animateOut);
             }
           };
