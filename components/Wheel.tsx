@@ -42,6 +42,8 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled, cente
 
   const centerImageRef = useRef<HTMLImageElement | null>(null);
   const centerImageUrlRef = useRef<string | null>(null);
+  const isHoveringRef = useRef(false);
+  const hoverScaleRef = useRef(1);
 
   entriesRef.current = entries;
   onSpinEndRef.current = onSpinEnd;
@@ -296,24 +298,32 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled, cente
       ctx.restore();
 
       if (hasBadgeImg) {
-        // Draw badge image clipped to circle with outer glow
+        // Smoothly animate hover scale
+        const targetScale = isHoveringRef.current ? 1.12 : 1;
+        hoverScaleRef.current += (targetScale - hoverScaleRef.current) * 0.15;
+        const s = hoverScaleRef.current;
+        const scaledR = hubR * s;
+
+        // Draw badge image clipped to circle with glow on hover
         ctx.save();
-        ctx.shadowColor = "rgba(0, 0, 0, 0.6)";
-        ctx.shadowBlur = 12;
+        ctx.shadowColor = isHoveringRef.current
+          ? "rgba(255, 224, 72, 0.4)"
+          : "rgba(0, 0, 0, 0.6)";
+        ctx.shadowBlur = isHoveringRef.current ? 20 : 12;
         ctx.beginPath();
-        ctx.arc(0, 0, hubR, 0, 2 * Math.PI);
+        ctx.arc(0, 0, scaledR, 0, 2 * Math.PI);
         ctx.fillStyle = "#0a0a0a";
         ctx.fill();
         ctx.restore();
 
         ctx.save();
         ctx.beginPath();
-        ctx.arc(0, 0, hubR, 0, 2 * Math.PI);
+        ctx.arc(0, 0, scaledR, 0, 2 * Math.PI);
         ctx.clip();
         ctx.drawImage(
           centerImageRef.current!,
-          -hubR, -hubR,
-          hubR * 2, hubR * 2
+          -scaledR, -scaledR,
+          scaledR * 2, scaledR * 2
         );
         ctx.restore();
       } else {
@@ -499,7 +509,28 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled, cente
       <canvas
         ref={canvasRef}
         onClick={handleClick}
-        className="w-full h-full cursor-pointer rounded-full transition-transform duration-200 hover:scale-[1.02]"
+        onMouseEnter={() => {
+          isHoveringRef.current = true;
+          // Kick off animation frames for smooth badge scale
+          const animateHover = () => {
+            drawWheelRef.current();
+            if (isHoveringRef.current && Math.abs(hoverScaleRef.current - 1.12) > 0.002) {
+              requestAnimationFrame(animateHover);
+            }
+          };
+          requestAnimationFrame(animateHover);
+        }}
+        onMouseLeave={() => {
+          isHoveringRef.current = false;
+          const animateOut = () => {
+            drawWheelRef.current();
+            if (!isHoveringRef.current && Math.abs(hoverScaleRef.current - 1) > 0.002) {
+              requestAnimationFrame(animateOut);
+            }
+          };
+          requestAnimationFrame(animateOut);
+        }}
+        className="w-full h-full cursor-pointer rounded-full transition-shadow duration-300 hover:shadow-[0_0_40px_rgba(255,224,72,0.2)]"
       />
     </div>
   );
