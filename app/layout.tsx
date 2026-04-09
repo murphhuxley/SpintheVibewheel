@@ -23,8 +23,8 @@ const mundial = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "SpintheVibewheel",
-  description: "Built with the GVC Builder Kit",
+  title: "Wheel of Vibes",
+  description: "Spin the wheel to pick a random winner — powered by Good Vibes Club",
   icons: {
     icon: "/shaka.png",
     apple: "/shaka.png",

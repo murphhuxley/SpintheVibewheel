@@ -757,7 +757,7 @@ export default function Home() {
             className="drop-shadow-[0_0_12px_rgba(255,224,72,0.3)]"
           />
           <h1 className="font-display font-black text-4xl sm:text-5xl text-shimmer uppercase">
-            SPIN THE VIBEWHEEL
+            WHEEL OF VIBES
           </h1>
         </motion.header>
 
