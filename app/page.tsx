@@ -761,57 +761,56 @@ export default function Home() {
       </div>
 
       <div className="relative z-10 w-full max-w-[1400px] xl:max-w-[1440px] 2xl:max-w-[1840px] mx-auto px-4 sm:px-6 xl:px-8 2xl:px-10 py-6 xl:py-8 2xl:py-10 flex-1">
-        {/* Header */}
-        <motion.header
-          initial={false}
-          animate={{ opacity: 1, y: 0 }}
-          className={`${stageGridClassName} items-center mb-7 xl:mb-9`}
-        >
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3 min-w-0">
-            <Image
-              src="/shaka.png"
-              alt="GVC"
-              width={44}
-              height={44}
-              className="h-11 w-11 xl:h-12 xl:w-12 2xl:h-14 2xl:w-14 drop-shadow-[0_0_12px_rgba(255,224,72,0.3)]"
-            />
-            <h1 className="font-display font-black text-3xl sm:text-5xl xl:text-6xl 2xl:text-7xl text-shimmer uppercase text-center">
-              WHEEL OF VIBES
-            </h1>
-          </div>
-          <div className="hidden lg:block" aria-hidden />
-        </motion.header>
-
-        {/* Main layout */}
         <div className={`${stageGridClassName} items-start`}>
-          {/* Wheel panel */}
-          <motion.div
-            initial={false}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ type: "spring", stiffness: 80, damping: 20 }}
-            className="flex flex-col items-center xl:pt-2"
-          >
-            <Wheel
-              entries={entries}
-              onSpinEnd={handleSpinEnd}
-              onSpinStart={handleSpinStart}
-              disabled={controlsLocked}
-              centerImageUrl={selectedBadgeDef?.image || null}
-            />
-            <p className={`mt-3 font-body text-xs transition-all ${
-              !loadingBadge && entries.length >= 2
-                ? "text-white/40 animate-pulse"
-                : "text-white/25"
-            }`}>
-              {loadingBadge
-                ? "Loading badge holders..."
-                : isBadgeDrawMode
-                  ? "Spin the wheel to draw a badge"
-                  : entries.length >= 2
-                  ? "Click the wheel to spin"
-                  : "Add at least 2 names to spin"}
-            </p>
-          </motion.div>
+          <div className="min-w-0">
+            <motion.header
+              initial={false}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-7 xl:mb-9"
+            >
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3 min-w-0">
+                <Image
+                  src="/shaka.png"
+                  alt="GVC"
+                  width={44}
+                  height={44}
+                  className="h-11 w-11 xl:h-12 xl:w-12 2xl:h-14 2xl:w-14 drop-shadow-[0_0_12px_rgba(255,224,72,0.3)]"
+                />
+                <h1 className="font-display font-black text-3xl sm:text-5xl xl:text-6xl 2xl:text-7xl text-shimmer uppercase text-center">
+                  WHEEL OF VIBES
+                </h1>
+              </div>
+            </motion.header>
+
+            {/* Wheel panel */}
+            <motion.div
+              initial={false}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ type: "spring", stiffness: 80, damping: 20 }}
+              className="flex flex-col items-center xl:pt-2"
+            >
+              <Wheel
+                entries={entries}
+                onSpinEnd={handleSpinEnd}
+                onSpinStart={handleSpinStart}
+                disabled={controlsLocked}
+                centerImageUrl={selectedBadgeDef?.image || null}
+              />
+              <p className={`mt-3 font-body text-xs transition-all ${
+                !loadingBadge && entries.length >= 2
+                  ? "text-white/40 animate-pulse"
+                  : "text-white/25"
+              }`}>
+                {loadingBadge
+                  ? "Loading badge holders..."
+                  : isBadgeDrawMode
+                    ? "Spin the wheel to draw a badge"
+                    : entries.length >= 2
+                    ? "Click the wheel to spin"
+                    : "Add at least 2 names to spin"}
+              </p>
+            </motion.div>
+          </div>
 
           {/* Sidebar */}
           <motion.div
