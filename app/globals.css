@@ -254,3 +254,16 @@ body::after {
 .animate-pointer-bounce {
   animation: pointerBounce 1.8s ease-in-out 3;
 }
+
+/* ---------------------------------- */
+/* Wheel Idle Float                   */
+/* ---------------------------------- */
+
+@keyframes wheelFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+.animate-wheel-float {
+  animation: wheelFloat 4s ease-in-out infinite;
+}

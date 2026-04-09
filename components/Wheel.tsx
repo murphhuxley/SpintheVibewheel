@@ -112,22 +112,22 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled, cente
       void audio.play().catch(() => {});
     } catch {}
 
-    // Unlock celebration audio on mobile by doing a silent play during this user gesture
+    // Unlock celebration audio on mobile by doing a muted play during this user gesture
     try {
       if (cheerAudio.current) {
-        cheerAudio.current.volume = 0;
+        cheerAudio.current.muted = true;
         cheerAudio.current.play().then(() => {
           cheerAudio.current!.pause();
           cheerAudio.current!.currentTime = 0;
-          cheerAudio.current!.volume = 1;
+          cheerAudio.current!.muted = false;
         }).catch(() => {});
       }
       if (yayAudio.current) {
-        yayAudio.current.volume = 0;
+        yayAudio.current.muted = true;
         yayAudio.current.play().then(() => {
           yayAudio.current!.pause();
           yayAudio.current!.currentTime = 0;
-          yayAudio.current!.volume = 1;
+          yayAudio.current!.muted = false;
         }).catch(() => {});
       }
     } catch {}
@@ -508,7 +508,7 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled, cente
   }, [animateSpin, disabled, playSpinSound]);
 
   return (
-    <div className="relative aspect-square w-full max-w-[520px] lg:w-[min(100%,60vh)] xl:w-[min(100%,56vh)] 2xl:w-[min(100%,70vh)] lg:max-w-none mx-auto select-none">
+    <div className="relative aspect-square w-full max-w-[520px] lg:w-[min(100%,60vh)] xl:w-[min(100%,56vh)] 2xl:w-[min(100%,70vh)] lg:max-w-none mx-auto select-none animate-wheel-float hover:[animation-play-state:paused]">
       {/* Pointer — 3D gold arrow with bounce */}
       <div
         className="absolute top-0 left-1/2 z-10 pointer-events-none animate-pointer-bounce"
