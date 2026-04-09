@@ -1509,16 +1509,26 @@ export default function Home() {
                     </p>
                   )}
                 </div>
-                <span className="text-white/40 font-body text-sm xl:text-base tabular-nums">
-                  {entries.length}{" "}
-                  {isBadgeDrawMode
-                    ? entries.length === 1
-                      ? "badge"
-                      : "badges"
-                    : entries.length === 1
-                      ? "name"
-                      : "names"}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-white/40 font-body text-sm xl:text-base tabular-nums">
+                    {entries.length}{" "}
+                    {isBadgeDrawMode
+                      ? entries.length === 1
+                        ? "badge"
+                        : "badges"
+                      : entries.length === 1
+                        ? "name"
+                        : "names"}
+                  </span>
+                  <button
+                    onClick={reset}
+                    disabled={controlsLocked}
+                    className="inline-flex items-center gap-1 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 py-1.5 text-[11px] font-body text-white/55 transition-all hover:border-[#FFE048]/20 hover:text-[#FFE048] disabled:opacity-30"
+                  >
+                    <RotateCcw size={11} />
+                    Reset
+                  </button>
+                </div>
               </div>
 
               {/* Textarea */}
