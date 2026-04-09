@@ -957,9 +957,8 @@ export default function Home() {
                           value={badgeSearch}
                           onChange={(e) => setBadgeSearch(e.target.value)}
                           placeholder="Search badges..."
-                          autoFocus
                           disabled={controlsLocked}
-                          className="w-full bg-black/40 border border-white/[0.08] rounded-lg px-3 py-2 text-white font-body text-xs focus:outline-none focus:border-[#FFE048]/30 placeholder:text-white/20"
+                          className="w-full bg-black/40 border border-white/[0.08] rounded-lg px-3 py-2 text-white font-body text-base sm:text-xs focus:outline-none focus:border-[#FFE048]/30 placeholder:text-white/20"
                         />
                       </div>
                       {/* Badge list */}
