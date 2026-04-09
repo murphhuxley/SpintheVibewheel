@@ -12,7 +12,6 @@ interface Props {
   fullAddress?: string | null;
   ensName?: string | null;
   alignToWheel?: boolean;
-  onCelebrate?: () => void;
   badgeMatches?: Array<{
     badgeId: string;
     badgeName: string;
@@ -58,7 +57,6 @@ export default function WinnerDialog({
   fullAddress,
   ensName,
   alignToWheel = false,
-  onCelebrate,
   badgeMatches,
   activeBadgeCount = 0,
   onClose,
@@ -143,7 +141,6 @@ export default function WinnerDialog({
   useEffect(() => {
     if (winner) {
       setCopied(false);
-      onCelebrate?.();
       setConfetti(
         Array.from({ length: 70 }, () => ({
           x: Math.random() * 100,
@@ -155,7 +152,7 @@ export default function WinnerDialog({
         }))
       );
     }
-  }, [onCelebrate, winner]);
+  }, [winner]);
 
   return (
     <AnimatePresence>

@@ -614,9 +614,10 @@ export default function Home() {
       return;
     }
 
+    playCelebrationAudio();
     setWinner(name);
     setWinnerIdx(index);
-  }, [badgeDrawBadges]);
+  }, [badgeDrawBadges, playCelebrationAudio]);
 
   // Handle badge celebration completion — now load the holders
   const handleCelebrationComplete = useCallback(() => {
@@ -1337,7 +1338,6 @@ export default function Home() {
         fullAddress={winnerAddress}
         ensName={winnerEnsName}
         alignToWheel
-        onCelebrate={playCelebrationAudio}
         badgeMatches={winnerBadgeMatches}
         activeBadgeCount={activeBadgeIds.length}
         onClose={handleClose}
