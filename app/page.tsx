@@ -14,6 +14,7 @@ import {
   Award,
   Loader2,
   ChevronDown,
+  Check,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import Wheel from "@/components/Wheel";
@@ -36,6 +37,8 @@ const DEFAULT_NAMES = [
 
 const STORAGE_KEY = "vibewheel:lists";
 const RANDOM_BADGE_EXCLUSIONS = new Set(["any_gvc"]);
+const MIN_CHALLENGE_BADGE_COUNT = 2;
+const DEFAULT_CHALLENGE_BADGE_COUNT = 5;
 const CHEER_VOLUME = 1;
 const YAY_VOLUME = 0.72;
 
@@ -183,6 +186,15 @@ export default function Home() {
   const [badgeMap, setBadgeMap] = useState<BadgeTokenMap | null>(null);
   const [selectedBadge, setSelectedBadge] = useState<string | null>(null);
   const [activeBadgeIds, setActiveBadgeIds] = useState<string[]>([]);
+  const [badgeSelectionMode, setBadgeSelectionMode] = useState<
+    "single" | "challenge"
+  >("single");
+  const [challengeBadgeCount, setChallengeBadgeCount] = useState(
+    DEFAULT_CHALLENGE_BADGE_COUNT
+  );
+  const [pendingChallengeBadgeIds, setPendingChallengeBadgeIds] = useState<
+    string[]
+  >([]);
   const [badgeDrawBadges, setBadgeDrawBadges] = useState<BadgeDef[] | null>(
     null
   );
@@ -255,6 +267,10 @@ export default function Home() {
       );
     });
   }, [badgeMap, badges]);
+  const maxChallengeBadgeCount = Math.max(
+    MIN_CHALLENGE_BADGE_COUNT,
+    supportedBadges.length
+  );
   const activeBadgeDefs = useMemo(() => {
     if (activeBadgeIds.length === 0) return [];
 
@@ -263,6 +279,31 @@ export default function Home() {
       .map((badgeId) => badgeLookup.get(badgeId))
       .filter((badge): badge is BadgeDef => Boolean(badge));
   }, [activeBadgeIds, badges]);
+  const pendingChallengeBadges = useMemo(() => {
+    if (pendingChallengeBadgeIds.length === 0) return [];
+
+    const badgeLookup = new Map(badges.map((badge) => [badge.id, badge]));
+    return pendingChallengeBadgeIds
+      .map((badgeId) => badgeLookup.get(badgeId))
+      .filter((badge): badge is BadgeDef => Boolean(badge));
+  }, [badges, pendingChallengeBadgeIds]);
+
+  useEffect(() => {
+    setChallengeBadgeCount((current) =>
+      Math.max(
+        MIN_CHALLENGE_BADGE_COUNT,
+        Math.min(current, maxChallengeBadgeCount)
+      )
+    );
+  }, [maxChallengeBadgeCount]);
+
+  useEffect(() => {
+    setPendingChallengeBadgeIds((current) =>
+      current.length > challengeBadgeCount
+        ? current.slice(0, challengeBadgeCount)
+        : current
+    );
+  }, [challengeBadgeCount]);
 
   const unlockCelebrationAudio = useCallback(() => {
     if (celebrationAudioUnlockedRef.current) return;
@@ -353,6 +394,26 @@ export default function Home() {
   }, []);
 
   const handleClose = resetWinner;
+  const clearPendingChallengeBadges = useCallback(() => {
+    setPendingChallengeBadgeIds([]);
+  }, []);
+  const handleChallengeBadgeCountChange = useCallback(
+    (value: string) => {
+      const parsedValue = Number.parseInt(value, 10);
+      if (!Number.isFinite(parsedValue)) {
+        setChallengeBadgeCount(MIN_CHALLENGE_BADGE_COUNT);
+        return;
+      }
+
+      setChallengeBadgeCount(
+        Math.max(
+          MIN_CHALLENGE_BADGE_COUNT,
+          Math.min(parsedValue, maxChallengeBadgeCount)
+        )
+      );
+    },
+    [maxChallengeBadgeCount]
+  );
 
   const setManualText = useCallback(
     (value: string) => {
@@ -367,6 +428,7 @@ export default function Home() {
 
       resetWinner();
       setBadgeDrawBadges(null);
+      clearPendingChallengeBadges();
       setEntryAddresses([]);
       setEnsByAddress({});
       setActiveBadgeIds([]);
@@ -376,6 +438,7 @@ export default function Home() {
     [
       activeBadgeIds.length,
       badgeDrawBadges,
+      clearPendingChallengeBadges,
       invalidateBadgeLoad,
       loadingBadge,
       resetWinner,
@@ -431,6 +494,7 @@ export default function Home() {
     invalidateBadgeLoad();
     resetWinner();
     setBadgeDrawBadges(null);
+    clearPendingChallengeBadges();
     setText(DEFAULT_NAMES.join("\n"));
     setEntryAddresses(alignEntryAddresses(DEFAULT_NAMES.length));
     setEnsByAddress({});
@@ -591,6 +655,23 @@ export default function Home() {
     return null;
   }, [badgeMap, resetWinner]);
 
+  const loadBadgeChallenge = useCallback(
+    async (badgeIds: string[], source: "Random" | "Custom") => {
+      if (badgeIds.length < 2) {
+        toast.error("Pick at least 2 badges for a challenge");
+        return null;
+      }
+
+      return loadBadgeEntries(badgeIds, {
+        singleBadgeId: null,
+        loadingLabel: `Building ${source.toLowerCase()} ${badgeIds.length}-badge challenge...`,
+        activeName: `${source} ${badgeIds.length} Badge Challenge`,
+        successName: `your ${source.toLowerCase()} ${badgeIds.length}-badge challenge`,
+      });
+    },
+    [loadBadgeEntries]
+  );
+
   const handleSpinEnd = useCallback((name: string, index: number) => {
     isSpinningRef.current = false;
     setIsSpinning(false);
@@ -653,6 +734,27 @@ export default function Home() {
       return;
     }
 
+    if (badgeSelectionMode === "challenge") {
+      setBadgeDrawBadges(null);
+      setSelectedBadge(null);
+      setPendingChallengeBadgeIds((current) => {
+        if (current.includes(badgeId)) {
+          return current.filter((id) => id !== badgeId);
+        }
+
+        if (current.length >= challengeBadgeCount) {
+          toast.error(
+            `You can include up to ${challengeBadgeCount} badges in this challenge`
+          );
+          return current;
+        }
+
+        return [...current, badgeId];
+      });
+      return;
+    }
+
+    clearPendingChallengeBadges();
     setBadgeDrawBadges(null);
 
     const loadingLabel = strategy === "hkm_any" || strategy === "hkm_all"
@@ -672,23 +774,27 @@ export default function Home() {
   };
 
   const handleRandomizeBadgeSet = async () => {
-    if (controlsLocked || supportedBadges.length < 5) {
-      if (supportedBadges.length < 5) {
-        toast.error("Need at least 5 supported badges to build a challenge");
+    if (controlsLocked || supportedBadges.length < challengeBadgeCount) {
+      if (supportedBadges.length < challengeBadgeCount) {
+        toast.error(
+          `Need at least ${challengeBadgeCount} supported badges to build this challenge`
+        );
       }
       return;
     }
 
     setBadgeDrawBadges(null);
-    const chosenBadges = pickRandomItems(supportedBadges, 5);
+    setBadgeSelectionMode("challenge");
+    const chosenBadges = pickRandomItems(supportedBadges, challengeBadgeCount);
     const chosenIds = chosenBadges.map((badge) => badge.id);
 
-    await loadBadgeEntries(chosenIds, {
-      singleBadgeId: null,
-      loadingLabel: "Building 5-badge challenge...",
-      activeName: "Random 5 Badge Challenge",
-      successName: "your 5-badge challenge",
-    });
+    setPendingChallengeBadgeIds(chosenIds);
+    await loadBadgeChallenge(chosenIds, "Random");
+  };
+
+  const handleLoadManualBadgeChallenge = async () => {
+    if (controlsLocked) return;
+    await loadBadgeChallenge(pendingChallengeBadgeIds, "Custom");
   };
 
   const handleRandomBadgeDraw = () => {
@@ -701,6 +807,7 @@ export default function Home() {
 
     resetWinner();
     setBadgeDrawBadges(supportedBadges);
+    clearPendingChallengeBadges();
     setSelectedBadge(null);
     setActiveBadgeIds([]);
     setBadgeMatchesByAddress({});
@@ -750,6 +857,7 @@ export default function Home() {
     invalidateBadgeLoad();
     resetWinner();
     setBadgeDrawBadges(null);
+    clearPendingChallengeBadges();
     setText(list.entries.join("\n"));
     setEntryAddresses(
       alignEntryAddresses(list.entries.length, list.entryAddresses)
@@ -777,6 +885,24 @@ export default function Home() {
   };
 
   const selectedBadgeDef = badges.find((b) => b.id === selectedBadge);
+  const isChallengeBuilderMode = badgeSelectionMode === "challenge";
+  const challengeBadgeCountLabel =
+    challengeBadgeCount === 1 ? "badge" : "badges";
+  const dropdownBadgeImage =
+    isChallengeBuilderMode && pendingChallengeBadges.length === 1
+      ? pendingChallengeBadges[0]?.image ?? null
+      : selectedBadgeDef?.image ?? null;
+  const dropdownBadgeLabel = loadingBadge
+    ? "Loading holders..."
+    : isChallengeBuilderMode
+      ? pendingChallengeBadges.length === 0
+        ? `Select up to ${challengeBadgeCount} ${challengeBadgeCountLabel}...`
+        : pendingChallengeBadges.length === 1
+          ? pendingChallengeBadges[0].name
+          : `${pendingChallengeBadges.length} badges selected`
+      : selectedBadgeDef
+        ? selectedBadgeDef.name
+        : "Choose a badge...";
   const badgeDropdownRef = useRef<HTMLDivElement>(null);
 
   // Close badge dropdown on outside click
@@ -908,9 +1034,9 @@ export default function Home() {
                 </h3>
               </div>
               <p className="text-white/30 font-body text-xs mb-3">
-                Pick one badge, spin for a random badge draw, or randomize a
-                5-badge challenge. Any wallet with at least one active badge
-                becomes eligible for the raffle.
+                Pick one badge, spin for a random badge draw, or build a
+                multi-badge challenge. Choose how many badges to include, then
+                randomize that many or manually pick your own set.
               </p>
               <div className="mb-3 flex gap-2">
                 <button
@@ -923,11 +1049,71 @@ export default function Home() {
                 </button>
                 <button
                   onClick={handleRandomizeBadgeSet}
-                  disabled={controlsLocked || supportedBadges.length < 5}
+                  disabled={
+                    controlsLocked || supportedBadges.length < challengeBadgeCount
+                  }
                   className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-[#FFE048]/10 border border-[#FFE048]/20 px-3 py-2.5 text-[#FFE048] font-body text-xs hover:bg-[#FFE048]/15 transition-all disabled:opacity-30"
                 >
                   <Shuffle size={13} />
-                  {activeBadgeIds.length > 1 ? "Reroll 5 Badges" : "Randomize 5 Badges"}
+                  {activeBadgeIds.length > 1 &&
+                  activeBadgeIds.length === challengeBadgeCount
+                    ? `Reroll ${challengeBadgeCount} Badges`
+                    : `Randomize ${challengeBadgeCount} Badges`}
+                </button>
+              </div>
+              <div className="mb-3 rounded-2xl border border-white/[0.08] bg-black/20 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[0.2em] text-white/30">
+                      Challenge Size
+                    </p>
+                    <p className="mt-1 text-xs leading-relaxed text-white/45">
+                      Type how many badges to include in the randomized or
+                      manual challenge.
+                    </p>
+                  </div>
+                  <div className="w-[92px]">
+                    <input
+                      type="number"
+                      min={MIN_CHALLENGE_BADGE_COUNT}
+                      max={maxChallengeBadgeCount}
+                      step={1}
+                      value={challengeBadgeCount}
+                      onChange={(e) =>
+                        !controlsLocked &&
+                        handleChallengeBadgeCountChange(e.target.value)
+                      }
+                      disabled={controlsLocked}
+                      className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-center font-body text-sm text-white focus:outline-none focus:border-[#FFE048]/30 disabled:opacity-30"
+                    />
+                    <p className="mt-1 text-center text-[10px] text-white/25">
+                      2 to {maxChallengeBadgeCount}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="mb-3 flex gap-2">
+                <button
+                  onClick={() => !controlsLocked && setBadgeSelectionMode("single")}
+                  disabled={controlsLocked}
+                  className={`flex-1 rounded-xl px-3 py-2.5 font-body text-xs transition-all ${
+                    badgeSelectionMode === "single"
+                      ? "border border-[#FFE048]/25 bg-[#FFE048]/10 text-[#FFE048]"
+                      : "border border-white/[0.08] bg-white/[0.03] text-white/60 hover:border-[#FFE048]/20 hover:text-[#FFE048]"
+                  } disabled:opacity-30`}
+                >
+                  Single Badge
+                </button>
+                <button
+                  onClick={() => !controlsLocked && setBadgeSelectionMode("challenge")}
+                  disabled={controlsLocked}
+                  className={`flex-1 rounded-xl px-3 py-2.5 font-body text-xs transition-all ${
+                    badgeSelectionMode === "challenge"
+                      ? "border border-[#FFE048]/25 bg-[#FFE048]/10 text-[#FFE048]"
+                      : "border border-white/[0.08] bg-white/[0.03] text-white/60 hover:border-[#FFE048]/20 hover:text-[#FFE048]"
+                  } disabled:opacity-30`}
+                >
+                  Manual Challenge
                 </button>
               </div>
               {isBadgeDrawMode && (
@@ -940,6 +1126,73 @@ export default function Home() {
                     Once it lands, that badge will be selected automatically
                     and its holders will populate the entries.
                   </p>
+                </div>
+              )}
+              {isChallengeBuilderMode && (
+                <div className="mb-3 rounded-2xl border border-white/[0.08] bg-black/20 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[11px] uppercase tracking-[0.2em] text-white/30">
+                        Manual Challenge
+                      </p>
+                      <p className="mt-1 text-xs leading-relaxed text-white/45">
+                        Pick up to {challengeBadgeCount} {challengeBadgeCountLabel} from the
+                        dropdown below, then load that badge set into the raffle.
+                      </p>
+                    </div>
+                    <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2 py-1 text-[11px] text-white/55">
+                      {pendingChallengeBadges.length}/{challengeBadgeCount}
+                    </span>
+                  </div>
+                  {pendingChallengeBadges.length > 0 ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {pendingChallengeBadges.map((badge) => (
+                        <button
+                          key={badge.id}
+                          onClick={() =>
+                            !controlsLocked &&
+                            setPendingChallengeBadgeIds((current) =>
+                              current.filter((id) => id !== badge.id)
+                            )
+                          }
+                          disabled={controlsLocked}
+                          className="inline-flex items-center gap-2 rounded-full border border-[#FFE048]/20 bg-[#FFE048]/8 px-2.5 py-1 text-left text-[11px] text-[#FFE048] transition-all hover:bg-[#FFE048]/12 disabled:opacity-40"
+                        >
+                          <Image
+                            src={badge.image}
+                            alt=""
+                            width={18}
+                            height={18}
+                            className="h-[18px] w-[18px] rounded"
+                          />
+                          <span className="max-w-[140px] truncate">
+                            {badge.name}
+                          </span>
+                          <X size={11} />
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-xs text-white/25">
+                      No badges selected yet.
+                    </p>
+                  )}
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      onClick={handleLoadManualBadgeChallenge}
+                      disabled={controlsLocked || pendingChallengeBadges.length < 2}
+                      className="flex-1 rounded-xl bg-[#FFE048]/10 border border-[#FFE048]/20 px-3 py-2.5 text-[#FFE048] font-body text-xs transition-all hover:bg-[#FFE048]/15 disabled:opacity-30"
+                    >
+                      Load {pendingChallengeBadges.length || challengeBadgeCount} Badge Challenge
+                    </button>
+                    <button
+                      onClick={clearPendingChallengeBadges}
+                      disabled={controlsLocked || pendingChallengeBadges.length === 0}
+                      className="rounded-xl border border-white/[0.08] px-3 py-2.5 text-white/55 font-body text-xs transition-all hover:border-[#FFE048]/20 hover:text-[#FFE048] disabled:opacity-30"
+                    >
+                      Clear
+                    </button>
+                  </div>
                 </div>
               )}
               {activeBadgeDefs.length > 1 && (
@@ -989,9 +1242,9 @@ export default function Home() {
                 >
                   {loadingBadge ? (
                     <Loader2 size={16} className="text-[#FFE048] animate-spin" />
-                  ) : selectedBadgeDef ? (
+                  ) : dropdownBadgeImage ? (
                     <Image
-                      src={selectedBadgeDef.image}
+                      src={dropdownBadgeImage}
                       alt=""
                       width={24}
                       height={24}
@@ -1002,14 +1255,14 @@ export default function Home() {
                   )}
                   <span
                     className={`flex-1 font-body text-sm truncate ${
-                      selectedBadgeDef ? "text-white" : "text-white/30"
+                      loadingBadge ||
+                      dropdownBadgeLabel !== "Choose a badge..." &&
+                      !dropdownBadgeLabel.startsWith("Select up to")
+                        ? "text-white"
+                        : "text-white/30"
                     }`}
                   >
-                    {loadingBadge
-                      ? "Loading holders..."
-                      : selectedBadgeDef
-                        ? selectedBadgeDef.name
-                        : "Choose a badge..."}
+                    {dropdownBadgeLabel}
                   </span>
                   <ChevronDown
                     size={14}
@@ -1088,16 +1341,19 @@ export default function Home() {
                                           : strategy === "leaderboard"
                                             ? "Leaderboard"
                                             : strategy === "unsupported"
-                                              ? "Unavailable"
+                                            ? "Unavailable"
                                               : `${tokenCount} tokens`;
                               const isUnavailable = strategy === "unsupported";
+                              const isSelectedInPicker = isChallengeBuilderMode
+                                ? pendingChallengeBadgeIds.includes(badge.id)
+                                : selectedBadge === badge.id;
                               return (
                                 <button
                                   key={badge.id}
                                   onClick={() => handleBadgeSelect(badge.id)}
                                   disabled={controlsLocked || isUnavailable}
                                   className={`w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/[0.04] transition-colors text-left ${
-                                    selectedBadge === badge.id
+                                    isSelectedInPicker
                                       ? "bg-[#FFE048]/5"
                                       : ""
                                   } ${isUnavailable ? "opacity-40" : ""} disabled:cursor-not-allowed disabled:hover:bg-transparent`}
@@ -1117,6 +1373,11 @@ export default function Home() {
                                       {strategyLabel}
                                     </p>
                                   </div>
+                                  {isChallengeBuilderMode && isSelectedInPicker && (
+                                    <div className="flex h-5 w-5 items-center justify-center rounded-full border border-[#FFE048]/25 bg-[#FFE048]/10 text-[#FFE048]">
+                                      <Check size={11} />
+                                    </div>
+                                  )}
                                 </button>
                               );
                             })
@@ -1346,6 +1607,7 @@ export default function Home() {
 
       <BadgeCelebration
         badge={celebratingBadge}
+        alignToWheel
         onComplete={handleCelebrationComplete}
       />
 
