@@ -19,9 +19,11 @@ interface Props {
   onSpinEnd: (winner: string, index: number) => void;
   onSpinStart?: () => void;
   disabled?: boolean;
+  /** URL of a badge image to display in the center hub */
+  centerImageUrl?: string | null;
 }
 
-export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled }: Props) {
+export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled, centerImageUrl }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rotation = useRef(0);
   const spinning = useRef(false);
@@ -38,9 +40,32 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled }: Pro
   const onSpinEndRef = useRef(onSpinEnd);
   const onSpinStartRef = useRef(onSpinStart);
 
+  const centerImageRef = useRef<HTMLImageElement | null>(null);
+  const centerImageUrlRef = useRef<string | null>(null);
+
   entriesRef.current = entries;
   onSpinEndRef.current = onSpinEnd;
   onSpinStartRef.current = onSpinStart;
+
+  // Load center badge image when URL changes
+  useEffect(() => {
+    if (!centerImageUrl) {
+      centerImageRef.current = null;
+      centerImageUrlRef.current = null;
+      return;
+    }
+    if (centerImageUrl === centerImageUrlRef.current) return;
+    centerImageUrlRef.current = centerImageUrl;
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      if (centerImageUrlRef.current === centerImageUrl) {
+        centerImageRef.current = img;
+        drawWheelRef.current();
+      }
+    };
+    img.src = centerImageUrl;
+  }, [centerImageUrl]);
 
   // Preload spin sound
   useEffect(() => {
@@ -254,46 +279,74 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled }: Pro
         ctx.fill();
       }
 
-      // Center hub — 3D dome effect
-      const hubR = Math.max(22, Math.min(36, radius * 0.13));
+      // Center hub — badge image or 3D dome
+      const hasBadgeImg = centerImageRef.current && centerImageRef.current.complete;
+      const hubR = hasBadgeImg
+        ? Math.max(28, Math.min(48, radius * 0.17))
+        : Math.max(22, Math.min(36, radius * 0.13));
 
       // Hub shadow
       ctx.save();
-      ctx.shadowColor = "rgba(0,0,0,0.4)";
-      ctx.shadowBlur = 10;
+      ctx.shadowColor = "rgba(0,0,0,0.5)";
+      ctx.shadowBlur = hasBadgeImg ? 15 : 10;
       ctx.beginPath();
       ctx.arc(0, 0, hubR, 0, 2 * Math.PI);
       ctx.fillStyle = "#0a0a0a";
       ctx.fill();
       ctx.restore();
 
-      // Hub gradient (dome highlight)
-      const hubGrad = ctx.createRadialGradient(-hubR * 0.3, -hubR * 0.3, 0, 0, 0, hubR);
-      hubGrad.addColorStop(0, "#2a2a2a");
-      hubGrad.addColorStop(0.5, "#151515");
-      hubGrad.addColorStop(1, "#0a0a0a");
-      ctx.beginPath();
-      ctx.arc(0, 0, hubR, 0, 2 * Math.PI);
-      ctx.fillStyle = hubGrad;
-      ctx.fill();
+      if (hasBadgeImg) {
+        // Draw badge image clipped to circle
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(0, 0, hubR - 2, 0, 2 * Math.PI);
+        ctx.clip();
+        ctx.drawImage(
+          centerImageRef.current!,
+          -hubR + 2, -hubR + 2,
+          (hubR - 2) * 2, (hubR - 2) * 2
+        );
+        ctx.restore();
 
-      // Hub gold ring
-      const hubRingGrad = ctx.createLinearGradient(0, -hubR, 0, hubR);
-      hubRingGrad.addColorStop(0, "#FFE048");
-      hubRingGrad.addColorStop(0.5, "#fff8b8");
-      hubRingGrad.addColorStop(1, "#c4a520");
-      ctx.strokeStyle = hubRingGrad;
-      ctx.lineWidth = 3;
-      ctx.stroke();
+        // Gold ring around badge
+        const hubRingGrad = ctx.createLinearGradient(0, -hubR, 0, hubR);
+        hubRingGrad.addColorStop(0, "#FFE048");
+        hubRingGrad.addColorStop(0.5, "#fff8b8");
+        hubRingGrad.addColorStop(1, "#c4a520");
+        ctx.beginPath();
+        ctx.arc(0, 0, hubR, 0, 2 * Math.PI);
+        ctx.strokeStyle = hubRingGrad;
+        ctx.lineWidth = 3.5;
+        ctx.stroke();
+      } else {
+        // Default dome hub
+        const hubGrad = ctx.createRadialGradient(-hubR * 0.3, -hubR * 0.3, 0, 0, 0, hubR);
+        hubGrad.addColorStop(0, "#2a2a2a");
+        hubGrad.addColorStop(0.5, "#151515");
+        hubGrad.addColorStop(1, "#0a0a0a");
+        ctx.beginPath();
+        ctx.arc(0, 0, hubR, 0, 2 * Math.PI);
+        ctx.fillStyle = hubGrad;
+        ctx.fill();
 
-      // Hub center dot (highlight)
-      const dotGrad = ctx.createRadialGradient(-2, -2, 0, 0, 0, 6);
-      dotGrad.addColorStop(0, "#FFE048");
-      dotGrad.addColorStop(1, "#c4a520");
-      ctx.beginPath();
-      ctx.arc(0, 0, 5, 0, 2 * Math.PI);
-      ctx.fillStyle = dotGrad;
-      ctx.fill();
+        // Gold ring
+        const hubRingGrad = ctx.createLinearGradient(0, -hubR, 0, hubR);
+        hubRingGrad.addColorStop(0, "#FFE048");
+        hubRingGrad.addColorStop(0.5, "#fff8b8");
+        hubRingGrad.addColorStop(1, "#c4a520");
+        ctx.strokeStyle = hubRingGrad;
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        // Center dot
+        const dotGrad = ctx.createRadialGradient(-2, -2, 0, 0, 0, 6);
+        dotGrad.addColorStop(0, "#FFE048");
+        dotGrad.addColorStop(1, "#c4a520");
+        ctx.beginPath();
+        ctx.arc(0, 0, 5, 0, 2 * Math.PI);
+        ctx.fillStyle = dotGrad;
+        ctx.fill();
+      }
 
       ctx.restore();
     };

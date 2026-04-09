@@ -18,6 +18,7 @@ import {
 import toast from "react-hot-toast";
 import Wheel from "@/components/Wheel";
 import WinnerDialog from "@/components/WinnerDialog";
+import BadgeCelebration from "@/components/BadgeCelebration";
 import {
   getBadgeStrategy,
 } from "@/lib/badge-fetch-utils";
@@ -186,6 +187,8 @@ export default function Home() {
   const [badgeDropdownOpen, setBadgeDropdownOpen] = useState(false);
   const [badgeSearch, setBadgeSearch] = useState("");
   const [loadingBadge, setLoadingBadge] = useState(false);
+  const [celebratingBadge, setCelebratingBadge] = useState<BadgeDef | null>(null);
+  const pendingBadgeLoadRef = useRef<{ badge: BadgeDef; restoreBadges: BadgeDef[] } | null>(null);
   const [entryAddresses, setEntryAddresses] = useState<Array<string | null>>(
     () => alignEntryAddresses(DEFAULT_NAMES.length)
   );
@@ -532,25 +535,38 @@ export default function Home() {
         return;
       }
 
+      // Show celebration, defer holder loading until celebration completes
+      pendingBadgeLoadRef.current = { badge: drawnBadge, restoreBadges: currentBadgeDrawBadges };
       setBadgeDrawBadges(null);
-      void (async () => {
-        const result = await loadBadgeEntries([drawnBadge.id], {
-          singleBadgeId: drawnBadge.id,
-          loadingLabel: `Drawn badge: ${drawnBadge.name}. Loading holders...`,
-          activeName: drawnBadge.name,
-          successName: `"${drawnBadge.name}"`,
-        });
-
-        if (!result) {
-          setBadgeDrawBadges(currentBadgeDrawBadges);
-        }
-      })();
+      setCelebratingBadge(drawnBadge);
       return;
     }
 
     setWinner(name);
     setWinnerIdx(index);
-  }, [badgeDrawBadges, loadBadgeEntries]);
+  }, [badgeDrawBadges]);
+
+  // Handle badge celebration completion — now load the holders
+  const handleCelebrationComplete = useCallback(() => {
+    setCelebratingBadge(null);
+    const pending = pendingBadgeLoadRef.current;
+    if (!pending) return;
+    pendingBadgeLoadRef.current = null;
+
+    const { badge: drawnBadge, restoreBadges } = pending;
+    void (async () => {
+      const result = await loadBadgeEntries([drawnBadge.id], {
+        singleBadgeId: drawnBadge.id,
+        loadingLabel: `Loading holders for ${drawnBadge.name}...`,
+        activeName: drawnBadge.name,
+        successName: `"${drawnBadge.name}"`,
+      });
+
+      if (!result) {
+        setBadgeDrawBadges(restoreBadges);
+      }
+    })();
+  }, [loadBadgeEntries]);
 
   // Badge selection handler
   const handleBadgeSelect = async (badgeId: string) => {
@@ -775,6 +791,7 @@ export default function Home() {
               onSpinEnd={handleSpinEnd}
               onSpinStart={handleSpinStart}
               disabled={controlsLocked}
+              centerImageUrl={selectedBadgeDef?.image || null}
             />
             <p className="mt-3 text-white/25 font-body text-xs">
               {loadingBadge
@@ -1219,6 +1236,11 @@ export default function Home() {
         activeBadgeCount={activeBadgeIds.length}
         onClose={handleClose}
         onRemove={handleRemove}
+      />
+
+      <BadgeCelebration
+        badge={celebratingBadge}
+        onComplete={handleCelebrationComplete}
       />
     </main>
   );
