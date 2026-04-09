@@ -36,16 +36,17 @@ interface ConfettiPiece {
 function getWinnerHeadingClassName(winner: string | null) {
   const length = winner?.trim().length ?? 0;
 
+  // Mobile: consistent size, scale only on desktop
   if (length >= 24) {
-    return "text-[1.9rem] sm:text-[2.7rem] leading-[0.92] tracking-tight";
+    return "text-xl sm:text-[2.7rem] leading-tight sm:leading-[0.92] tracking-tight break-all";
   }
 
   if (length >= 18) {
-    return "text-[2.3rem] sm:text-[3.15rem] leading-[0.94] tracking-tight";
+    return "text-2xl sm:text-[3.15rem] leading-tight sm:leading-[0.94] tracking-tight break-all";
   }
 
   if (length >= 14) {
-    return "text-[2.7rem] sm:text-[3.6rem] leading-[0.96] tracking-tight";
+    return "text-2xl sm:text-[3.6rem] leading-tight sm:leading-[0.96] tracking-tight";
   }
 
   return "text-3xl sm:text-4xl leading-tight";
@@ -202,7 +203,7 @@ export default function WinnerDialog({
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0 }}
               transition={{ type: "spring", damping: 20, stiffness: 300 }}
-              className="relative z-10 bg-[#121212] border border-[#FFE048]/30 rounded-3xl p-8 sm:p-10 max-w-xl w-full mx-4 text-center card-glow"
+              className="relative z-10 bg-[#121212] border border-[#FFE048]/30 rounded-3xl p-6 sm:p-10 max-w-xl w-full mx-4 text-center card-glow overflow-y-auto max-h-[85vh]"
               onClick={(e) => e.stopPropagation()}
             >
               <p className="font-body text-white/50 text-sm uppercase tracking-widest mb-2">
