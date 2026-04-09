@@ -9,6 +9,7 @@ import {
   RotateCcw,
   Save,
   FolderOpen,
+  Download,
   Trash2,
   X,
   Award,
@@ -80,6 +81,14 @@ interface BadgeHoldersResponse {
     }>
   >;
   ensByAddress?: Record<string, string>;
+}
+
+interface SnapshotEntriesResponse {
+  addresses: string[];
+  entries: string[];
+  ensByAddress?: Record<string, string>;
+  periodName?: string;
+  createdAt?: string;
 }
 
 interface BadgeMatchInfo {
@@ -672,6 +681,94 @@ export default function Home() {
     [loadBadgeEntries]
   );
 
+  const handleLoadSnapshot = useCallback(async () => {
+    if (isSpinningRef.current || loadingBadgeRef.current) return;
+
+    setBadgeDropdownOpen(false);
+    setBadgeSearch("");
+    setShowLoadPanel(false);
+    setShowSaveInput(false);
+    loadingBadgeRef.current = true;
+    setLoadingBadge(true);
+    resetWinner();
+
+    const requestId = badgeLoadRequestRef.current + 1;
+    badgeLoadRequestRef.current = requestId;
+
+    try {
+      toast.loading("Loading latest GVC snapshot...", { id: "badge-load" });
+
+      const res = await fetch("/api/snapshot");
+      const data = (await res.json()) as SnapshotEntriesResponse & {
+        error?: unknown;
+      };
+
+      if (requestId !== badgeLoadRequestRef.current) return;
+
+      if (!res.ok) {
+        throw new Error(
+          typeof data.error === "string"
+            ? data.error
+            : "Failed to load snapshot"
+        );
+      }
+
+      if (
+        !Array.isArray(data.addresses) ||
+        !data.addresses.every((address): address is string => typeof address === "string") ||
+        !Array.isArray(data.entries) ||
+        !data.entries.every((entry): entry is string => typeof entry === "string")
+      ) {
+        throw new Error("Invalid snapshot response");
+      }
+
+      if (data.addresses.length === 0 || data.addresses.length !== data.entries.length) {
+        throw new Error("Snapshot response is empty or misaligned");
+      }
+
+      const loadedEnsByAddress =
+        data.ensByAddress &&
+        typeof data.ensByAddress === "object" &&
+        !Array.isArray(data.ensByAddress)
+          ? Object.fromEntries(
+              Object.entries(data.ensByAddress).flatMap(([address, ensName]) =>
+                typeof ensName === "string" && ensName
+                  ? [[address.toLowerCase(), ensName]]
+                  : []
+              )
+            )
+          : {};
+
+      const periodLabel =
+        typeof data.periodName === "string" && data.periodName.trim()
+          ? data.periodName.trim()
+          : "Latest Snapshot";
+
+      clearPendingChallengeBadges();
+      setBadgeDrawBadges(null);
+      setSelectedBadge(null);
+      setActiveBadgeIds([]);
+      setBadgeMatchesByAddress({});
+      setEntryAddresses(alignEntryAddresses(data.entries.length, data.addresses));
+      setEnsByAddress(loadedEnsByAddress);
+      setText(data.entries.join("\n"));
+      setActiveListName(`Snapshot: ${periodLabel}`);
+
+      toast.success(`Loaded ${data.addresses.length} wallets from ${periodLabel}`, {
+        id: "badge-load",
+      });
+    } catch (err) {
+      if (requestId !== badgeLoadRequestRef.current) return;
+      const msg = err instanceof Error ? err.message : "Failed to load snapshot";
+      toast.error(msg, { id: "badge-load" });
+    } finally {
+      if (requestId === badgeLoadRequestRef.current) {
+        loadingBadgeRef.current = false;
+        setLoadingBadge(false);
+      }
+    }
+  }, [clearPendingChallengeBadges, resetWinner]);
+
   const handleSpinEnd = useCallback((name: string, index: number) => {
     isSpinningRef.current = false;
     setIsSpinning(false);
@@ -1061,6 +1158,14 @@ export default function Home() {
                     : `Randomize ${challengeBadgeCount} Badges`}
                 </button>
               </div>
+              <button
+                onClick={handleLoadSnapshot}
+                disabled={controlsLocked}
+                className="mb-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-white/70 font-body text-xs transition-all hover:border-[#FFE048]/20 hover:text-[#FFE048] disabled:opacity-30"
+              >
+                <Download size={13} />
+                Load Snapshot Wallets
+              </button>
               <div className="mb-3 rounded-2xl border border-white/[0.08] bg-black/20 p-3">
                 <div className="flex items-center justify-between gap-3">
                   <div>
