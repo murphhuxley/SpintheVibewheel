@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 const CONFETTI_COLORS = ["#FFE048", "#FF6B9D", "#8B5CF6", "#2EFF2E", "#FF5F1F", "#06B6D4", "#F97316"];
@@ -14,24 +14,11 @@ export default function BadgeCelebration({ badge, onComplete }: Props) {
   const [confetti, setConfetti] = useState<
     Array<{ x: number; delay: number; duration: number; color: string; size: number; drift: number }>
   >([]);
-  const cheerRef = useRef<HTMLAudioElement | null>(null);
-  const yayRef = useRef<HTMLAudioElement | null>(null);
-
-  useEffect(() => {
-    cheerRef.current = new Audio("/cheer.mp3");
-    cheerRef.current.preload = "auto";
-    yayRef.current = new Audio("/yay.mp3");
-    yayRef.current.preload = "auto";
-  }, []);
 
   useEffect(() => {
     if (!badge) return;
 
-    try {
-      if (cheerRef.current) { cheerRef.current.currentTime = 0; cheerRef.current.play().catch(() => {}); }
-      if (yayRef.current) { yayRef.current.currentTime = 0; yayRef.current.play().catch(() => {}); }
-    } catch {}
-
+    // Celebration sounds handled by Wheel component (chained off spin audio end)
     setConfetti(
       Array.from({ length: 80 }, () => ({
         x: Math.random() * 100,
