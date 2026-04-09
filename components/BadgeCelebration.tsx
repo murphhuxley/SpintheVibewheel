@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -72,59 +73,60 @@ export default function BadgeCelebration({
             ))}
           </div>
 
-          <motion.div
-            initial={{ scale: 0.3, opacity: 0, y: 30 }}
-            animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.8, opacity: 0 }}
-            transition={{ type: "spring", damping: 15, stiffness: 200, delay: 0.1 }}
-            className={`relative z-10 text-center ${
+          <div
+            className={
               alignToWheel
                 ? "lg:-translate-x-[196px] xl:-translate-x-[220px] 2xl:-translate-x-[248px]"
                 : ""
-            }`}
+            }
           >
-            <div className="relative mx-auto mb-6 flex h-52 w-52 items-center justify-center sm:h-60 sm:w-60">
-              <div
-                className="pointer-events-none absolute inset-[14%] rounded-full animate-glowPulse"
-                style={{
-                  boxShadow:
-                    "0 0 55px rgba(255, 224, 72, 0.32), 0 0 110px rgba(255, 224, 72, 0.12)",
-                }}
-              />
-              <div className="absolute inset-2 rounded-[2rem] border border-[#FFE048]/20 bg-[#121212]/88 shadow-[0_0_35px_rgba(255,224,72,0.14)] backdrop-blur-sm" />
-              <div className="absolute inset-0 rounded-[2.25rem] border border-[#FFE048]/12" />
-
-              <motion.img
-                src={badge.image}
-                alt={badge.name}
-                initial={{ rotate: -10 }}
-                animate={{ rotate: 0 }}
-                transition={{ type: "spring", stiffness: 150 }}
-                className="relative z-10 h-40 w-40 rounded-[1.6rem] border-2 border-[#FFE048]/40 object-cover sm:h-48 sm:w-48"
-                style={{
-                  boxShadow:
-                    "0 0 36px rgba(255, 224, 72, 0.24), 0 10px 36px rgba(0,0,0,0.45)",
-                }}
-              />
-            </div>
-
             <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-              className="max-w-xl px-4"
+              initial={{ scale: 0.3, opacity: 0, y: 30 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              transition={{ type: "spring", damping: 15, stiffness: 200, delay: 0.1 }}
+              className="relative z-10 mx-4 flex w-full max-w-[calc(100vw-2rem)] flex-col items-center text-center sm:max-w-xl"
             >
-              <p className="font-body text-white/50 text-sm uppercase tracking-widest mb-1">
-                The wheel has chosen
-              </p>
-              <h2 className="font-display text-3xl sm:text-4xl font-black text-shimmer leading-tight">
-                {badge.name.toUpperCase()}
-              </h2>
-              <p className="font-body text-white/30 text-xs mt-3">
-                Loading holders onto the wheel...
-              </p>
+              <div className="relative mx-auto mb-6 flex h-56 w-56 items-center justify-center sm:h-64 sm:w-64">
+                <div className="pointer-events-none absolute inset-0 rounded-full bg-[#FFE048]/14 blur-3xl" />
+                <div className="pointer-events-none absolute inset-4 rounded-full border border-[#FFE048]/18 bg-[radial-gradient(circle_at_center,rgba(255,224,72,0.16),rgba(255,224,72,0.02)_58%,transparent_74%)]" />
+
+                <motion.div
+                  initial={{ rotate: -10 }}
+                  animate={{ rotate: 0 }}
+                  transition={{ type: "spring", stiffness: 150 }}
+                  className="relative z-10 flex h-44 w-44 items-center justify-center rounded-[2rem] border border-[#FFE048]/24 bg-[#121212]/90 p-3 shadow-[0_0_40px_rgba(255,224,72,0.16),0_16px_40px_rgba(0,0,0,0.42)] backdrop-blur-sm sm:h-52 sm:w-52 sm:rounded-[2.25rem]"
+                >
+                  <div className="relative h-full w-full overflow-hidden rounded-[1.4rem] sm:rounded-[1.7rem]">
+                    <Image
+                      src={badge.image}
+                      alt={badge.name}
+                      fill
+                      sizes="(min-width: 640px) 208px, 176px"
+                      className="object-cover"
+                    />
+                  </div>
+                </motion.div>
+              </div>
+
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="w-full max-w-xl px-4"
+              >
+                <p className="mb-1 font-body text-sm uppercase tracking-widest text-white/50">
+                  The wheel has chosen
+                </p>
+                <h2 className="font-display text-3xl font-black leading-tight text-shimmer sm:text-4xl">
+                  {badge.name.toUpperCase()}
+                </h2>
+                <p className="mt-3 font-body text-xs text-white/30">
+                  Loading holders onto the wheel...
+                </p>
+              </motion.div>
             </motion.div>
-          </motion.div>
+          </div>
         </motion.div>
       )}
     </AnimatePresence>

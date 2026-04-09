@@ -40,8 +40,8 @@ const STORAGE_KEY = "vibewheel:lists";
 const RANDOM_BADGE_EXCLUSIONS = new Set(["any_gvc"]);
 const MIN_CHALLENGE_BADGE_COUNT = 2;
 const DEFAULT_CHALLENGE_BADGE_COUNT = 5;
-const CHEER_VOLUME = 1;
-const YAY_VOLUME = 0.72;
+const WINNER_CELEBRATION_VOLUME = 1;
+const BADGE_CELEBRATION_VOLUME = 1;
 
 interface SavedList {
   name: string;
@@ -215,8 +215,8 @@ export default function Home() {
   const [entryAddresses, setEntryAddresses] = useState<Array<string | null>>(
     () => alignEntryAddresses(DEFAULT_NAMES.length)
   );
-  const cheerAudioRef = useRef<HTMLAudioElement | null>(null);
-  const yayAudioRef = useRef<HTMLAudioElement | null>(null);
+  const winnerCelebrationAudioRef = useRef<HTMLAudioElement | null>(null);
+  const badgeCelebrationAudioRef = useRef<HTMLAudioElement | null>(null);
   const celebrationAudioUnlockedRef = useRef(false);
   const [ensByAddress, setEnsByAddress] = useState<Record<string, string>>({});
   const [badgeMatchesByAddress, setBadgeMatchesByAddress] = useState<
@@ -318,8 +318,14 @@ export default function Home() {
     if (celebrationAudioUnlockedRef.current) return;
 
     const audioElements = [
-      { audio: cheerAudioRef.current, volume: CHEER_VOLUME },
-      { audio: yayAudioRef.current, volume: YAY_VOLUME },
+      {
+        audio: winnerCelebrationAudioRef.current,
+        volume: WINNER_CELEBRATION_VOLUME,
+      },
+      {
+        audio: badgeCelebrationAudioRef.current,
+        volume: BADGE_CELEBRATION_VOLUME,
+      },
     ].filter(
       (
         item
@@ -355,18 +361,10 @@ export default function Home() {
     });
   }, []);
 
-  const playCelebrationAudio = useCallback(() => {
-    const audioElements = [
-      { audio: cheerAudioRef.current, volume: CHEER_VOLUME },
-      { audio: yayAudioRef.current, volume: YAY_VOLUME },
-    ].filter(
-      (
-        item
-      ): item is { audio: HTMLAudioElement; volume: number } =>
-        Boolean(item.audio)
-    );
+  const playAudioElement = useCallback(
+    (audio: HTMLAudioElement | null, volume: number) => {
+      if (!audio) return;
 
-    audioElements.forEach(({ audio, volume }) => {
       try {
         audio.pause();
         audio.currentTime = 0;
@@ -377,8 +375,23 @@ export default function Home() {
       } catch {
         // Ignore playback failures and keep the UI responsive.
       }
-    });
-  }, []);
+    },
+    []
+  );
+
+  const playWinnerCelebrationAudio = useCallback(() => {
+    playAudioElement(
+      winnerCelebrationAudioRef.current,
+      WINNER_CELEBRATION_VOLUME
+    );
+  }, [playAudioElement]);
+
+  const playBadgeCelebrationAudio = useCallback(() => {
+    playAudioElement(
+      badgeCelebrationAudioRef.current,
+      BADGE_CELEBRATION_VOLUME
+    );
+  }, [playAudioElement]);
 
   const handleSpinStart = useCallback(() => {
     unlockCelebrationAudio();
@@ -786,16 +799,17 @@ export default function Home() {
       }
 
       // Show celebration, defer holder loading until celebration completes
+      playBadgeCelebrationAudio();
       pendingBadgeLoadRef.current = { badge: drawnBadge, restoreBadges: currentBadgeDrawBadges };
       setBadgeDrawBadges(null);
       setCelebratingBadge(drawnBadge);
       return;
     }
 
-    playCelebrationAudio();
+    playWinnerCelebrationAudio();
     setWinner(name);
     setWinnerIdx(index);
-  }, [badgeDrawBadges, playCelebrationAudio]);
+  }, [badgeDrawBadges, playBadgeCelebrationAudio, playWinnerCelebrationAudio]);
 
   // Handle badge celebration completion — now load the holders
   const handleCelebrationComplete = useCallback(() => {
@@ -1019,7 +1033,10 @@ export default function Home() {
   }, [badgeDropdownOpen]);
 
   useEffect(() => {
-    const celebrationAudios = [cheerAudioRef.current, yayAudioRef.current];
+    const celebrationAudios = [
+      winnerCelebrationAudioRef.current,
+      badgeCelebrationAudioRef.current,
+    ];
 
     return () => {
       badgeLoadRequestRef.current += 1;
@@ -1726,11 +1743,21 @@ export default function Home() {
         onComplete={handleCelebrationComplete}
       />
 
-      <audio ref={cheerAudioRef} preload="auto" playsInline className="hidden">
-        <source src="/cheer.mp3" type="audio/mpeg" />
+      <audio
+        ref={winnerCelebrationAudioRef}
+        preload="auto"
+        playsInline
+        className="hidden"
+      >
+        <source src="/winner-celebration.mp4" type="audio/mp4" />
       </audio>
-      <audio ref={yayAudioRef} preload="auto" playsInline className="hidden">
-        <source src="/yay.mp3" type="audio/mpeg" />
+      <audio
+        ref={badgeCelebrationAudioRef}
+        preload="auto"
+        playsInline
+        className="hidden"
+      >
+        <source src="/badge-celebration.wav" type="audio/wav" />
       </audio>
 
       {/* Footer */}
