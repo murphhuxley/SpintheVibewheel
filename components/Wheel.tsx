@@ -296,24 +296,27 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled, cente
       ctx.restore();
 
       if (hasBadgeImg) {
-        // Draw badge image clipped to circle
+        // Draw badge image clipped to circle with drop shadow
+        ctx.save();
+        ctx.shadowColor = "rgba(0, 0, 0, 0.6)";
+        ctx.shadowBlur = 12;
+        ctx.shadowOffsetY = 3;
+        ctx.beginPath();
+        ctx.arc(0, 0, hubR, 0, 2 * Math.PI);
+        ctx.fillStyle = "#0a0a0a";
+        ctx.fill();
+        ctx.restore();
+
         ctx.save();
         ctx.beginPath();
-        ctx.arc(0, 0, hubR - 2, 0, 2 * Math.PI);
+        ctx.arc(0, 0, hubR, 0, 2 * Math.PI);
         ctx.clip();
         ctx.drawImage(
           centerImageRef.current!,
-          -hubR + 2, -hubR + 2,
-          (hubR - 2) * 2, (hubR - 2) * 2
+          -hubR, -hubR,
+          hubR * 2, hubR * 2
         );
         ctx.restore();
-
-        // Black ring around badge
-        ctx.beginPath();
-        ctx.arc(0, 0, hubR, 0, 2 * Math.PI);
-        ctx.strokeStyle = "#050505";
-        ctx.lineWidth = 4;
-        ctx.stroke();
       } else {
         // Default dome hub
         const hubGrad = ctx.createRadialGradient(-hubR * 0.3, -hubR * 0.3, 0, 0, 0, hubR);
