@@ -36,6 +36,8 @@ const DEFAULT_NAMES = [
 
 const STORAGE_KEY = "vibewheel:lists";
 const RANDOM_BADGE_EXCLUSIONS = new Set(["any_gvc"]);
+const CHEER_VOLUME = 1;
+const YAY_VOLUME = 0.72;
 
 interface SavedList {
   name: string;
@@ -265,24 +267,33 @@ export default function Home() {
   const unlockCelebrationAudio = useCallback(() => {
     if (celebrationAudioUnlockedRef.current) return;
 
-    const audioElements = [cheerAudioRef.current, yayAudioRef.current].filter(
-      (audio): audio is HTMLAudioElement => Boolean(audio)
+    const audioElements = [
+      { audio: cheerAudioRef.current, volume: CHEER_VOLUME },
+      { audio: yayAudioRef.current, volume: YAY_VOLUME },
+    ].filter(
+      (
+        item
+      ): item is { audio: HTMLAudioElement; volume: number } =>
+        Boolean(item.audio)
     );
 
     if (audioElements.length === 0) return;
 
     void Promise.all(
-      audioElements.map(async (audio) => {
+      audioElements.map(async ({ audio, volume }) => {
         try {
+          audio.volume = volume;
           audio.muted = true;
           audio.currentTime = 0;
           await audio.play();
           audio.pause();
           audio.currentTime = 0;
           audio.muted = false;
+          audio.volume = volume;
           return true;
         } catch {
           audio.muted = false;
+          audio.volume = volume;
           return false;
         }
       })
@@ -294,14 +305,21 @@ export default function Home() {
   }, []);
 
   const playCelebrationAudio = useCallback(() => {
-    const audioElements = [cheerAudioRef.current, yayAudioRef.current].filter(
-      (audio): audio is HTMLAudioElement => Boolean(audio)
+    const audioElements = [
+      { audio: cheerAudioRef.current, volume: CHEER_VOLUME },
+      { audio: yayAudioRef.current, volume: YAY_VOLUME },
+    ].filter(
+      (
+        item
+      ): item is { audio: HTMLAudioElement; volume: number } =>
+        Boolean(item.audio)
     );
 
-    audioElements.forEach((audio) => {
+    audioElements.forEach(({ audio, volume }) => {
       try {
         audio.pause();
         audio.currentTime = 0;
+        audio.volume = volume;
         void audio.play().catch(() => {});
       } catch {
         // Ignore playback failures and keep the UI responsive.
