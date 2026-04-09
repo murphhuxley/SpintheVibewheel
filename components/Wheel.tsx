@@ -284,7 +284,7 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled, cente
       // Center hub — badge image or 3D dome
       const hasBadgeImg = centerImageRef.current && centerImageRef.current.complete;
       const hubR = hasBadgeImg
-        ? Math.max(28, Math.min(48, radius * 0.17))
+        ? Math.max(34, Math.min(64, radius * 0.22))
         : Math.max(22, Math.min(36, radius * 0.13));
 
       // Hub shadow
@@ -518,7 +518,7 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled, cente
           const my = e.clientY - rect.top;
           const dist = Math.sqrt((mx - cx) ** 2 + (my - cy) ** 2);
           const radius = Math.min(cx, cy) - 10;
-          const hubR = Math.max(28, Math.min(48, radius * 0.17));
+          const hubR = Math.max(34, Math.min(64, radius * 0.22));
           const wasHovering = isHoveringRef.current;
           isHoveringRef.current = dist <= hubR * 1.2;
           if (isHoveringRef.current !== wasHovering) {
