@@ -296,11 +296,10 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled, cente
       ctx.restore();
 
       if (hasBadgeImg) {
-        // Draw badge image clipped to circle with drop shadow
+        // Draw badge image clipped to circle with outer glow
         ctx.save();
-        ctx.shadowColor = "rgba(0, 0, 0, 0.6)";
-        ctx.shadowBlur = 12;
-        ctx.shadowOffsetY = 3;
+        ctx.shadowColor = "rgba(255, 224, 72, 0.35)";
+        ctx.shadowBlur = 18;
         ctx.beginPath();
         ctx.arc(0, 0, hubR, 0, 2 * Math.PI);
         ctx.fillStyle = "#0a0a0a";
