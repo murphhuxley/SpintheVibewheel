@@ -765,7 +765,7 @@ export default function Home() {
         <motion.header
           initial={false}
           animate={{ opacity: 1, y: 0 }}
-          className={`${stageGridClassName} items-center mb-6 xl:mb-8`}
+          className={`${stageGridClassName} items-center mb-7 xl:mb-9`}
         >
           <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3 min-w-0">
             <Image
