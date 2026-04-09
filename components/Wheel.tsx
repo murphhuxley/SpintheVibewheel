@@ -135,6 +135,34 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled, cente
       draw();
     };
 
+    const loadCanvasFont = async () => {
+      if (cancelled) return;
+
+      const val = getComputedStyle(document.body).getPropertyValue("--font-brice").trim();
+      if (val) {
+        briceFamily = val;
+      }
+
+      if (!("fonts" in document)) {
+        draw();
+        return;
+      }
+
+      try {
+        await Promise.allSettled([
+          document.fonts.load(`700 32px ${briceFamily}`),
+          document.fonts.load(`900 32px ${briceFamily}`),
+          document.fonts.ready,
+        ]);
+      } catch {
+        // Fall back to the best available font if the browser blocks font APIs.
+      }
+
+      if (!cancelled) {
+        draw();
+      }
+    };
+
     const draw = () => {
       const dpr = window.devicePixelRatio || 1;
       const rect = canvas.getBoundingClientRect();
@@ -367,7 +395,12 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled, cente
 
     drawWheelRef.current = draw;
     resolveFont();
-    void document.fonts.ready.then(resolveFont);
+    void loadCanvasFont();
+
+    const handleFontLoadingDone = () => {
+      resolveFont();
+    };
+    document.fonts?.addEventListener?.("loadingdone", handleFontLoadingDone);
 
     resizeObserver = new ResizeObserver(() => draw());
     resizeObserver.observe(canvas);
@@ -375,6 +408,7 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled, cente
 
     return () => {
       cancelled = true;
+      document.fonts?.removeEventListener?.("loadingdone", handleFontLoadingDone);
       resizeObserver?.disconnect();
       window.removeEventListener("resize", draw);
     };
