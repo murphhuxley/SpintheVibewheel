@@ -192,6 +192,9 @@ export default function Home() {
   const [entryAddresses, setEntryAddresses] = useState<Array<string | null>>(
     () => alignEntryAddresses(DEFAULT_NAMES.length)
   );
+  const cheerAudioRef = useRef<HTMLAudioElement | null>(null);
+  const yayAudioRef = useRef<HTMLAudioElement | null>(null);
+  const celebrationAudioUnlockedRef = useRef(false);
   const [ensByAddress, setEnsByAddress] = useState<Record<string, string>>({});
   const [badgeMatchesByAddress, setBadgeMatchesByAddress] = useState<
     Record<string, BadgeMatchInfo[]>
@@ -259,14 +262,62 @@ export default function Home() {
       .filter((badge): badge is BadgeDef => Boolean(badge));
   }, [activeBadgeIds, badges]);
 
+  const unlockCelebrationAudio = useCallback(() => {
+    if (celebrationAudioUnlockedRef.current) return;
+
+    const audioElements = [cheerAudioRef.current, yayAudioRef.current].filter(
+      (audio): audio is HTMLAudioElement => Boolean(audio)
+    );
+
+    if (audioElements.length === 0) return;
+
+    void Promise.all(
+      audioElements.map(async (audio) => {
+        try {
+          audio.muted = true;
+          audio.currentTime = 0;
+          await audio.play();
+          audio.pause();
+          audio.currentTime = 0;
+          audio.muted = false;
+          return true;
+        } catch {
+          audio.muted = false;
+          return false;
+        }
+      })
+    ).then((results) => {
+      if (results.some(Boolean)) {
+        celebrationAudioUnlockedRef.current = true;
+      }
+    });
+  }, []);
+
+  const playCelebrationAudio = useCallback(() => {
+    const audioElements = [cheerAudioRef.current, yayAudioRef.current].filter(
+      (audio): audio is HTMLAudioElement => Boolean(audio)
+    );
+
+    audioElements.forEach((audio) => {
+      try {
+        audio.pause();
+        audio.currentTime = 0;
+        void audio.play().catch(() => {});
+      } catch {
+        // Ignore playback failures and keep the UI responsive.
+      }
+    });
+  }, []);
+
   const handleSpinStart = useCallback(() => {
+    unlockCelebrationAudio();
     isSpinningRef.current = true;
     setIsSpinning(true);
     setBadgeDropdownOpen(false);
     setBadgeSearch("");
     setShowLoadPanel(false);
     setShowSaveInput(false);
-  }, []);
+  }, [unlockCelebrationAudio]);
 
   const invalidateBadgeLoad = useCallback(() => {
     badgeLoadRequestRef.current += 1;
@@ -723,9 +774,16 @@ export default function Home() {
   }, [badgeDropdownOpen]);
 
   useEffect(() => {
+    const celebrationAudios = [cheerAudioRef.current, yayAudioRef.current];
+
     return () => {
       badgeLoadRequestRef.current += 1;
       toast.dismiss("badge-load");
+      celebrationAudios.forEach((audio) => {
+        if (!audio) return;
+        audio.pause();
+        audio.currentTime = 0;
+      });
     };
   }, []);
 
@@ -1258,6 +1316,7 @@ export default function Home() {
         fullAddress={winnerAddress}
         ensName={winnerEnsName}
         alignToWheel
+        onCelebrate={playCelebrationAudio}
         badgeMatches={winnerBadgeMatches}
         activeBadgeCount={activeBadgeIds.length}
         onClose={handleClose}
@@ -1268,6 +1327,13 @@ export default function Home() {
         badge={celebratingBadge}
         onComplete={handleCelebrationComplete}
       />
+
+      <audio ref={cheerAudioRef} preload="auto" playsInline className="hidden">
+        <source src="/cheer.mp3" type="audio/mpeg" />
+      </audio>
+      <audio ref={yayAudioRef} preload="auto" playsInline className="hidden">
+        <source src="/yay.mp3" type="audio/mpeg" />
+      </audio>
 
       {/* Footer */}
       <footer className="relative z-10 py-6 text-center border-t border-white/[0.04]">
