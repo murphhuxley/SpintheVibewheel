@@ -92,20 +92,8 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled, cente
     yay.preload = "auto";
     yayAudio.current = yay;
 
-    // Chain celebration sounds to play after spin ends
-    const onSpinEnded = () => {
-      setTimeout(() => {
-        try {
-          if (cheerAudio.current) { cheerAudio.current.currentTime = 0; cheerAudio.current.play().catch(() => {}); }
-          if (yayAudio.current) { yayAudio.current.currentTime = 0; yayAudio.current.play().catch(() => {}); }
-        } catch {}
-      }, 200);
-    };
-    spin.addEventListener("ended", onSpinEnded);
-
     return () => {
       spin.removeEventListener("loadedmetadata", updateDuration);
-      spin.removeEventListener("ended", onSpinEnded);
       spin.pause();
       spinAudio.current = null;
       cheer.pause();
@@ -121,12 +109,28 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled, cente
 
     try {
       audio.currentTime = 0;
-      void audio.play().catch(() => {
-        /* audio blocked */
-      });
-    } catch {
-      /* audio blocked */
-    }
+      void audio.play().catch(() => {});
+    } catch {}
+
+    // Unlock celebration audio on mobile by doing a silent play during this user gesture
+    try {
+      if (cheerAudio.current) {
+        cheerAudio.current.volume = 0;
+        cheerAudio.current.play().then(() => {
+          cheerAudio.current!.pause();
+          cheerAudio.current!.currentTime = 0;
+          cheerAudio.current!.volume = 1;
+        }).catch(() => {});
+      }
+      if (yayAudio.current) {
+        yayAudio.current.volume = 0;
+        yayAudio.current.play().then(() => {
+          yayAudio.current!.pause();
+          yayAudio.current!.currentTime = 0;
+          yayAudio.current!.volume = 1;
+        }).catch(() => {});
+      }
+    } catch {}
   }, []);
 
   const stopSpinSound = useCallback(() => {
@@ -415,9 +419,17 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled, cente
     drawWheelRef.current();
   }, [entries]);
 
+  const playCelebrationSounds = useCallback(() => {
+    try {
+      if (cheerAudio.current) { cheerAudio.current.currentTime = 0; cheerAudio.current.play().catch(() => {}); }
+      if (yayAudio.current) { yayAudio.current.currentTime = 0; yayAudio.current.play().catch(() => {}); }
+    } catch {}
+  }, []);
+
   const finishSpin = useCallback(() => {
     spinning.current = false;
     stopSpinSound();
+    playCelebrationSounds();
 
     const items =
       spinEntriesRef.current.length > 0 ? spinEntriesRef.current : entriesRef.current;
@@ -431,7 +443,7 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled, cente
       onSpinEndRef.current(items[winIdx], winIdx);
       winnerTimeoutRef.current = null;
     }, WINNER_DIALOG_DELAY_MS);
-  }, [getSegmentAt, stopSpinSound]);
+  }, [getSegmentAt, stopSpinSound, playCelebrationSounds]);
 
   const animateSpin = useCallback((timestamp: number) => {
     const progress = Math.min(
