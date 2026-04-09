@@ -740,7 +740,7 @@ export default function Home() {
       ? badgeMatchesByAddress[winnerAddress.toLowerCase()] ?? []
       : null;
   const stageGridClassName =
-    "grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1.15fr)_400px] 2xl:grid-cols-[minmax(0,1.22fr)_440px] gap-8 xl:gap-10 2xl:gap-14";
+    "grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1.08fr)_390px] 2xl:grid-cols-[minmax(0,1.2fr)_440px] gap-8 xl:gap-9 2xl:gap-14";
 
   return (
     <main className="min-h-screen relative overflow-hidden flex flex-col">
@@ -760,7 +760,7 @@ export default function Home() {
         ))}
       </div>
 
-      <div className="relative z-10 w-full max-w-[1400px] xl:max-w-[1640px] 2xl:max-w-[1840px] mx-auto px-4 sm:px-6 xl:px-8 2xl:px-10 py-6 xl:py-8 2xl:py-10 flex-1">
+      <div className="relative z-10 w-full max-w-[1400px] xl:max-w-[1560px] 2xl:max-w-[1840px] mx-auto px-4 sm:px-6 xl:px-8 2xl:px-10 py-6 xl:py-8 2xl:py-10 flex-1">
         {/* Header */}
         <motion.header
           initial={false}
@@ -818,7 +818,7 @@ export default function Home() {
             initial={false}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.1 }}
-            className="w-full space-y-4 xl:space-y-5 lg:max-w-[360px] xl:max-w-[400px] 2xl:max-w-[440px] lg:justify-self-end"
+            className="w-full space-y-4 xl:space-y-5 lg:max-w-[360px] xl:max-w-[390px] 2xl:max-w-[440px] lg:justify-self-end"
           >
             {/* Badge selector */}
             <div className="bg-[#121212] border border-[#FFE048]/20 rounded-2xl p-5 xl:p-6 2xl:p-7">
