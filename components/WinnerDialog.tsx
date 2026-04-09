@@ -36,17 +36,16 @@ interface ConfettiPiece {
 function getWinnerHeadingClassName(winner: string | null) {
   const length = winner?.trim().length ?? 0;
 
-  // Mobile: consistent size, scale only on desktop
-  if (length >= 24) {
-    return "text-xl sm:text-[2.7rem] leading-tight sm:leading-[0.92] tracking-tight break-all";
+  if (length >= 28) {
+    return "text-[1.7rem] sm:text-[2.35rem] lg:text-[2.8rem] leading-[1.02] tracking-tight";
   }
 
-  if (length >= 18) {
-    return "text-2xl sm:text-[3.15rem] leading-tight sm:leading-[0.94] tracking-tight break-all";
+  if (length >= 22) {
+    return "text-[1.95rem] sm:text-[2.75rem] lg:text-[3.1rem] leading-[1] tracking-tight";
   }
 
-  if (length >= 14) {
-    return "text-2xl sm:text-[3.6rem] leading-tight sm:leading-[0.96] tracking-tight";
+  if (length >= 16) {
+    return "text-[2.25rem] sm:text-[3.15rem] lg:text-[3.45rem] leading-[0.98] tracking-tight";
   }
 
   return "text-3xl sm:text-4xl leading-tight";
@@ -202,24 +201,24 @@ export default function WinnerDialog({
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0 }}
               transition={{ type: "spring", damping: 20, stiffness: 300 }}
-              className="relative z-10 bg-[#121212] border border-[#FFE048]/30 rounded-3xl p-6 sm:p-10 max-w-xl w-full mx-4 text-center card-glow overflow-y-auto max-h-[85vh]"
+              className="relative z-10 bg-[#121212] border border-[#FFE048]/30 rounded-3xl p-6 sm:p-10 w-full max-w-[calc(100vw-2rem)] sm:max-w-2xl mx-4 text-center card-glow overflow-y-auto max-h-[85vh]"
               onClick={(e) => e.stopPropagation()}
             >
               <p className="font-body text-white/50 text-sm uppercase tracking-widest mb-2">
                 We have a winner!
               </p>
               <h2
-                className={`font-display font-black text-shimmer mb-2 ${winnerHeadingClassName}`}
+                className={`mb-2 w-full px-1 font-display font-black text-shimmer [overflow-wrap:anywhere] break-words ${winnerHeadingClassName}`}
               >
                 {winner}
               </h2>
               {fullAddress && fullAddress !== winner && (
-                <p className="font-mono text-white/40 text-xs mb-4 break-all">
+                <p className="mb-4 font-mono text-xs text-white/40 [overflow-wrap:anywhere] break-words">
                   {fullAddress}
                 </p>
               )}
               {resolvedEnsName && resolvedEnsName !== winner && (
-                <p className="mb-4 text-xs text-[#FFE048]/80 break-all">
+                <p className="mb-4 text-xs text-[#FFE048]/80 [overflow-wrap:anywhere] break-words">
                   ENS: {resolvedEnsName}
                 </p>
               )}
