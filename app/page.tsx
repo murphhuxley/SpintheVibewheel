@@ -741,7 +741,7 @@ export default function Home() {
       : null;
 
   return (
-    <main className="min-h-screen relative overflow-hidden">
+    <main className="min-h-screen relative overflow-hidden flex flex-col">
       {/* Ambient embers */}
       <div className="absolute inset-0 pointer-events-none">
         {Array.from({ length: 6 }, (_, i) => (
@@ -758,33 +758,33 @@ export default function Home() {
         ))}
       </div>
 
-      <div className="relative z-10 max-w-[1400px] mx-auto px-4 sm:px-6 py-6">
+      <div className="relative z-10 w-full max-w-[1400px] xl:max-w-[1640px] 2xl:max-w-[1840px] mx-auto px-4 sm:px-6 xl:px-8 2xl:px-10 py-6 xl:py-8 2xl:py-10 flex-1">
         {/* Header */}
         <motion.header
           initial={false}
           animate={{ opacity: 1, y: 0 }}
-          className="flex items-center justify-center gap-3 mb-6"
+          className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3 mb-6 xl:mb-8"
         >
           <Image
             src="/shaka.png"
             alt="GVC"
             width={44}
             height={44}
-            className="drop-shadow-[0_0_12px_rgba(255,224,72,0.3)]"
+            className="h-11 w-11 xl:h-12 xl:w-12 2xl:h-14 2xl:w-14 drop-shadow-[0_0_12px_rgba(255,224,72,0.3)]"
           />
-          <h1 className="font-display font-black text-4xl sm:text-5xl text-shimmer uppercase">
+          <h1 className="font-display font-black text-3xl sm:text-5xl xl:text-6xl 2xl:text-7xl text-shimmer uppercase text-center">
             WHEEL OF VIBES
           </h1>
         </motion.header>
 
         {/* Main layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-8 items-center">
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1.15fr)_400px] 2xl:grid-cols-[minmax(0,1.22fr)_440px] gap-8 xl:gap-10 2xl:gap-14 items-start">
           {/* Wheel panel */}
           <motion.div
             initial={false}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ type: "spring", stiffness: 80, damping: 20 }}
-            className="flex flex-col items-center"
+            className="flex flex-col items-center xl:pt-2"
           >
             <Wheel
               entries={entries}
@@ -793,7 +793,11 @@ export default function Home() {
               disabled={controlsLocked}
               centerImageUrl={selectedBadgeDef?.image || null}
             />
-            <p className="mt-3 text-white/25 font-body text-xs">
+            <p className={`mt-3 font-body text-xs transition-all ${
+              !loadingBadge && entries.length >= 2
+                ? "text-white/40 animate-pulse"
+                : "text-white/25"
+            }`}>
               {loadingBadge
                 ? "Loading badge holders..."
                 : isBadgeDrawMode
@@ -809,10 +813,10 @@ export default function Home() {
             initial={false}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.1 }}
-            className="space-y-4"
+            className="w-full space-y-4 xl:space-y-5 lg:max-w-[360px] xl:max-w-[400px] 2xl:max-w-[440px] lg:justify-self-end"
           >
             {/* Badge selector */}
-            <div className="bg-[#121212] border border-[#FFE048]/20 rounded-2xl p-5">
+            <div className="bg-[#121212] border border-[#FFE048]/20 rounded-2xl p-5 xl:p-6 2xl:p-7">
               <div className="flex items-center gap-2 mb-3">
                 <Award size={16} className="text-[#FFE048]" />
                 <h3 className="font-display font-bold text-white text-sm uppercase">
@@ -1025,7 +1029,7 @@ export default function Home() {
             </div>
 
             {/* Entries panel */}
-            <div className="bg-[#121212] border border-white/[0.08] rounded-2xl p-5">
+            <div className="bg-[#121212] border border-white/[0.08] rounded-2xl p-5 xl:p-6 2xl:p-7">
               {/* Header row */}
               <div className="flex items-center justify-between mb-3">
                 <div>
@@ -1038,7 +1042,7 @@ export default function Home() {
                     </p>
                   )}
                 </div>
-                <span className="text-white/40 font-body text-sm tabular-nums">
+                <span className="text-white/40 font-body text-sm xl:text-base tabular-nums">
                   {entries.length}{" "}
                   {isBadgeDrawMode
                     ? entries.length === 1
@@ -1057,7 +1061,7 @@ export default function Home() {
                 placeholder={"Enter names, one per line\u2026"}
                 disabled={controlsLocked}
                 spellCheck={false}
-                className="w-full h-52 bg-black/40 border border-white/[0.08] rounded-xl p-4 text-white font-body text-sm leading-relaxed resize-none focus:outline-none focus:border-[#FFE048]/30 transition-colors placeholder:text-white/20 disabled:opacity-40"
+                className="w-full h-52 xl:h-60 2xl:h-64 bg-black/40 border border-white/[0.08] rounded-xl p-4 xl:p-5 text-white font-body text-sm leading-relaxed resize-none focus:outline-none focus:border-[#FFE048]/30 transition-colors placeholder:text-white/20 disabled:opacity-40"
               />
 
               {/* Action buttons */}
@@ -1090,7 +1094,7 @@ export default function Home() {
             </div>
 
             {/* Save / Load panel */}
-            <div className="bg-[#121212] border border-white/[0.08] rounded-2xl p-5">
+            <div className="bg-[#121212] border border-white/[0.08] rounded-2xl p-5 xl:p-6 2xl:p-7">
               <h3 className="font-display font-bold text-white text-sm uppercase mb-3">
                 Saved Lists
               </h3>
@@ -1242,6 +1246,21 @@ export default function Home() {
         badge={celebratingBadge}
         onComplete={handleCelebrationComplete}
       />
+
+      {/* Footer */}
+      <footer className="relative z-10 py-6 text-center border-t border-white/[0.04]">
+        <p className="font-body text-white/20 text-xs">
+          Powered by{" "}
+          <a
+            href="https://www.goodvibesclub.io"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[#FFE048]/40 hover:text-[#FFE048]/70 transition-colors"
+          >
+            Good Vibes Club
+          </a>
+        </p>
+      </footer>
     </main>
   );
 }

@@ -241,3 +241,16 @@ body::after {
 .animate-confetti {
   animation: confettiFall ease-out forwards;
 }
+
+/* ---------------------------------- */
+/* Pointer Bounce                     */
+/* ---------------------------------- */
+
+@keyframes pointerBounce {
+  0%, 100% { transform: translateX(-50%) translateY(-2px); }
+  50% { transform: translateX(-50%) translateY(4px); }
+}
+
+.animate-pointer-bounce {
+  animation: pointerBounce 1.8s ease-in-out 3;
+}
