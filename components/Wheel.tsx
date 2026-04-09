@@ -308,15 +308,11 @@ export default function Wheel({ entries, onSpinEnd, onSpinStart, disabled, cente
         );
         ctx.restore();
 
-        // Gold ring around badge
-        const hubRingGrad = ctx.createLinearGradient(0, -hubR, 0, hubR);
-        hubRingGrad.addColorStop(0, "#FFE048");
-        hubRingGrad.addColorStop(0.5, "#fff8b8");
-        hubRingGrad.addColorStop(1, "#c4a520");
+        // Black ring around badge
         ctx.beginPath();
         ctx.arc(0, 0, hubR, 0, 2 * Math.PI);
-        ctx.strokeStyle = hubRingGrad;
-        ctx.lineWidth = 3.5;
+        ctx.strokeStyle = "#050505";
+        ctx.lineWidth = 4;
         ctx.stroke();
       } else {
         // Default dome hub
