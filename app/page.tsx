@@ -940,93 +940,111 @@ export default function Home() {
                   />
                 </button>
 
-                {/* Dropdown panel */}
+                {/* Dropdown panel — fixed bottom sheet on mobile, absolute on desktop */}
                 <AnimatePresence>
                   {badgeDropdownOpen && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -4 }}
-                      transition={{ duration: 0.12 }}
-                      className="absolute z-30 top-full mt-1 left-0 right-0 bg-[#1a1a1a] border border-white/[0.1] rounded-xl overflow-hidden shadow-2xl max-h-[70vh]"
-                    >
-                      {/* Search */}
-                      <div className="p-2 border-b border-white/[0.06]">
-                        <input
-                          type="text"
-                          value={badgeSearch}
-                          onChange={(e) => setBadgeSearch(e.target.value)}
-                          placeholder="Search badges..."
-                          disabled={controlsLocked}
-                          className="w-full bg-black/40 border border-white/[0.08] rounded-lg px-3 py-2 text-white font-body text-base sm:text-xs focus:outline-none focus:border-[#FFE048]/30 placeholder:text-white/20"
-                        />
-                      </div>
-                      {/* Badge list */}
-                      <div className="max-h-[60vh] overflow-y-auto overscroll-contain touch-pan-y">
-                        {filteredBadges.length === 0 ? (
-                          <p className="text-white/30 font-body text-xs p-4 text-center">
-                            No badges found
-                          </p>
-                        ) : (
-                          filteredBadges.map((badge) => {
-                            const tokenCount =
-                              badgeMap?.badgeToTokens[badge.id]?.length || 0;
-                            const strategy = badgeMap
-                              ? getBadgeStrategy(
-                                  badge.id,
-                                  badgeMap.badgeToTokens,
-                                  badge
-                                )
-                              : "token_map";
-                            const strategyLabel =
-                              strategy === "hkm_any" || strategy === "hkm_all"
-                                ? "ERC-1155"
-                                : strategy === "combo" || strategy === "multi_type"
-                                  ? "Combo"
-                                  : badge.requirement?.type === "badge_count"
-                                    ? "Milestone"
-                                    : badge.requirement?.type === "manual_assignment"
-                                      ? "Earned"
-                                      : badge.requirement?.type?.startsWith("erc20")
-                                        ? "VIBESTR"
-                                        : strategy === "leaderboard"
-                                          ? "Leaderboard"
-                                          : strategy === "unsupported"
-                                            ? "Unavailable"
-                                            : `${tokenCount} tokens`;
-                            const isUnavailable = strategy === "unsupported";
-                            return (
-                              <button
-                                key={badge.id}
-                                onClick={() => handleBadgeSelect(badge.id)}
-                                disabled={controlsLocked || isUnavailable}
-                                className={`w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/[0.04] transition-colors text-left ${
-                                  selectedBadge === badge.id
-                                    ? "bg-[#FFE048]/5"
-                                    : ""
-                                } ${isUnavailable ? "opacity-40" : ""} disabled:cursor-not-allowed disabled:hover:bg-transparent`}
-                              >
-                                <Image
-                                  src={badge.image}
-                                  alt=""
-                                  width={28}
-                                  height={28}
-                                  className="w-7 h-7 rounded flex-shrink-0"
-                                />
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-white font-body text-xs truncate">
-                                    {badge.name}
-                                  </p>
-                                  <p className={`font-body text-[10px] ${isUnavailable ? "text-white/15" : "text-white/25"}`}>
-                                    {strategyLabel}
-                                  </p>
-                                </div>
-                              </button>
-                            );
-                          })
-                        )}
-                      </div>
-                    </motion.div>
+                    <>
+                      {/* Backdrop — mobile only */}
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/60 z-40 lg:hidden"
+                        onClick={() => { setBadgeDropdownOpen(false); setBadgeSearch(""); }}
+                      />
+                      <motion.div
+                        initial={{ opacity: 0, y: 100 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 100 }}
+                        transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                        className="fixed bottom-0 left-0 right-0 z-50 bg-[#1a1a1a] rounded-t-2xl shadow-2xl lg:absolute lg:z-30 lg:bottom-auto lg:top-full lg:mt-1 lg:left-0 lg:right-0 lg:rounded-xl lg:rounded-t-xl"
+                        style={{ maxHeight: "75vh" }}
+                      >
+                        {/* Drag handle — mobile */}
+                        <div className="flex justify-center pt-3 pb-1 lg:hidden">
+                          <div className="w-10 h-1 rounded-full bg-white/20" />
+                        </div>
+                        {/* Search */}
+                        <div className="p-2 border-b border-white/[0.06]">
+                          <input
+                            type="text"
+                            value={badgeSearch}
+                            onChange={(e) => setBadgeSearch(e.target.value)}
+                            placeholder="Search badges..."
+                            disabled={controlsLocked}
+                            className="w-full bg-black/40 border border-white/[0.08] rounded-lg px-3 py-2 text-white font-body text-base lg:text-xs focus:outline-none focus:border-[#FFE048]/30 placeholder:text-white/20"
+                          />
+                        </div>
+                        {/* Badge list — scrollable */}
+                        <div
+                          className="overflow-y-auto overscroll-contain"
+                          style={{ maxHeight: "calc(75vh - 90px)", WebkitOverflowScrolling: "touch" }}
+                        >
+                          {filteredBadges.length === 0 ? (
+                            <p className="text-white/30 font-body text-xs p-4 text-center">
+                              No badges found
+                            </p>
+                          ) : (
+                            filteredBadges.map((badge) => {
+                              const tokenCount =
+                                badgeMap?.badgeToTokens[badge.id]?.length || 0;
+                              const strategy = badgeMap
+                                ? getBadgeStrategy(
+                                    badge.id,
+                                    badgeMap.badgeToTokens,
+                                    badge
+                                  )
+                                : "token_map";
+                              const strategyLabel =
+                                strategy === "hkm_any" || strategy === "hkm_all"
+                                  ? "ERC-1155"
+                                  : strategy === "combo" || strategy === "multi_type"
+                                    ? "Combo"
+                                    : badge.requirement?.type === "badge_count"
+                                      ? "Milestone"
+                                      : badge.requirement?.type === "manual_assignment"
+                                        ? "Earned"
+                                        : badge.requirement?.type?.startsWith("erc20")
+                                          ? "VIBESTR"
+                                          : strategy === "leaderboard"
+                                            ? "Leaderboard"
+                                            : strategy === "unsupported"
+                                              ? "Unavailable"
+                                              : `${tokenCount} tokens`;
+                              const isUnavailable = strategy === "unsupported";
+                              return (
+                                <button
+                                  key={badge.id}
+                                  onClick={() => handleBadgeSelect(badge.id)}
+                                  disabled={controlsLocked || isUnavailable}
+                                  className={`w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/[0.04] transition-colors text-left ${
+                                    selectedBadge === badge.id
+                                      ? "bg-[#FFE048]/5"
+                                      : ""
+                                  } ${isUnavailable ? "opacity-40" : ""} disabled:cursor-not-allowed disabled:hover:bg-transparent`}
+                                >
+                                  <Image
+                                    src={badge.image}
+                                    alt=""
+                                    width={28}
+                                    height={28}
+                                    className="w-7 h-7 rounded flex-shrink-0"
+                                  />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-white font-body text-xs truncate">
+                                      {badge.name}
+                                    </p>
+                                    <p className={`font-body text-[10px] ${isUnavailable ? "text-white/15" : "text-white/25"}`}>
+                                      {strategyLabel}
+                                    </p>
+                                  </div>
+                                </button>
+                              );
+                            })
+                          )}
+                        </div>
+                      </motion.div>
+                    </>
                   )}
                 </AnimatePresence>
               </div>
