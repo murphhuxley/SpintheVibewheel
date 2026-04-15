@@ -143,11 +143,13 @@ async function loadAddressesForBadge(
 
 export async function POST(request: NextRequest) {
   let requestedBadgeIds: string[] = [];
+  let sourceAddresses: string[] | null = null;
 
   try {
     const body = (await request.json()) as {
       badgeId?: unknown;
       badgeIds?: unknown;
+      sourceAddresses?: unknown;
     };
     if (typeof body.badgeId === "string") {
       requestedBadgeIds = [body.badgeId];
@@ -156,6 +158,19 @@ export async function POST(request: NextRequest) {
       body.badgeIds.every((badgeId): badgeId is string => typeof badgeId === "string")
     ) {
       requestedBadgeIds = Array.from(new Set(body.badgeIds));
+    }
+
+    if (Array.isArray(body.sourceAddresses)) {
+      sourceAddresses = Array.from(
+        new Set(
+          body.sourceAddresses.flatMap((address) =>
+            typeof address === "string" &&
+            address.toLowerCase().startsWith("0x")
+              ? [address.toLowerCase()]
+              : []
+          )
+        )
+      );
     }
   } catch {
     return NextResponse.json(
@@ -193,7 +208,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const addresses = Array.from(addressSet);
+    const allAddresses = Array.from(addressSet);
+    const sourceAddressSet = sourceAddresses ? new Set(sourceAddresses) : null;
+    const addresses = sourceAddressSet
+      ? allAddresses.filter((address) => sourceAddressSet.has(address))
+      : allAddresses;
 
     if (addresses.length === 0) {
       const emptyResponse: BadgeHolderResponse = {

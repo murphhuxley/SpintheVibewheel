@@ -222,6 +222,12 @@ export default function Home() {
   const [badgeMatchesByAddress, setBadgeMatchesByAddress] = useState<
     Record<string, BadgeMatchInfo[]>
   >({});
+  const [snapshotFilterAddresses, setSnapshotFilterAddresses] = useState<
+    string[] | null
+  >(null);
+  const [snapshotFilterLabel, setSnapshotFilterLabel] = useState<string | null>(
+    null
+  );
   const badgeLoadRequestRef = useRef(0);
   const isSpinningRef = useRef(false);
   const loadingBadgeRef = useRef(false);
@@ -246,6 +252,9 @@ export default function Home() {
   const entries = parseEntries(text);
   const controlsLocked = isSpinning || loadingBadge;
   const isBadgeDrawMode = (badgeDrawBadges?.length ?? 0) > 0;
+  const snapshotFilterCount = snapshotFilterAddresses?.length ?? 0;
+  const isSnapshotFilterActive =
+    snapshotFilterCount > 0 && Boolean(snapshotFilterLabel);
 
   useEffect(() => {
     isSpinningRef.current = isSpinning;
@@ -416,6 +425,10 @@ export default function Home() {
   }, []);
 
   const handleClose = resetWinner;
+  const clearSnapshotFilter = useCallback(() => {
+    setSnapshotFilterAddresses(null);
+    setSnapshotFilterLabel(null);
+  }, []);
   const clearPendingChallengeBadges = useCallback(() => {
     setPendingChallengeBadgeIds([]);
   }, []);
@@ -455,11 +468,13 @@ export default function Home() {
       setEnsByAddress({});
       setActiveBadgeIds([]);
       setBadgeMatchesByAddress({});
+      clearSnapshotFilter();
       setText(value);
     },
     [
       activeBadgeIds.length,
       badgeDrawBadges,
+      clearSnapshotFilter,
       clearPendingChallengeBadges,
       invalidateBadgeLoad,
       loadingBadge,
@@ -476,12 +491,18 @@ export default function Home() {
 
     const nextEntries = [...entries];
     const nextAddresses = alignEntryAddresses(entries.length, entryAddresses);
+    const removedAddress = nextAddresses[winnerIdx] ?? null;
 
     nextEntries.splice(winnerIdx, 1);
     nextAddresses.splice(winnerIdx, 1);
 
     setText(nextEntries.join("\n"));
     setEntryAddresses(nextAddresses);
+    if (removedAddress && isSnapshotFilterActive) {
+      setSnapshotFilterAddresses((current) =>
+        current ? current.filter((address) => address !== removedAddress) : current
+      );
+    }
     resetWinner();
   };
 
@@ -522,6 +543,7 @@ export default function Home() {
     setEnsByAddress({});
     setActiveBadgeIds([]);
     setBadgeMatchesByAddress({});
+    clearSnapshotFilter();
     setActiveListName(null);
     setSelectedBadge(null);
     setBadgeDropdownOpen(false);
@@ -546,6 +568,18 @@ export default function Home() {
       return null;
     }
 
+    const currentSnapshotFilterAddresses =
+      snapshotFilterAddresses && snapshotFilterAddresses.length > 0
+        ? snapshotFilterAddresses
+        : null;
+    const isSnapshotScopedLoad = Boolean(
+      currentSnapshotFilterAddresses && snapshotFilterLabel
+    );
+    const snapshotScopedListName =
+      isSnapshotScopedLoad && snapshotFilterLabel
+        ? `Snapshot: ${snapshotFilterLabel} · ${options.activeName}`
+        : options.activeName;
+
     setBadgeDropdownOpen(false);
     setBadgeSearch("");
     setShowLoadPanel(false);
@@ -567,8 +601,14 @@ export default function Home() {
         },
         body: JSON.stringify(
           badgeIds.length === 1
-            ? { badgeId: badgeIds[0] }
-            : { badgeIds }
+            ? {
+                badgeId: badgeIds[0],
+                sourceAddresses: currentSnapshotFilterAddresses,
+              }
+            : {
+                badgeIds,
+                sourceAddresses: currentSnapshotFilterAddresses,
+              }
         ),
       });
       const data = (await res.json()) as BadgeHoldersResponse & {
@@ -641,7 +681,12 @@ export default function Home() {
           : {};
 
       if (addresses.length === 0) {
-        toast.error("No holders found for this badge", { id: "badge-load" });
+        toast.error(
+          isSnapshotScopedLoad && snapshotFilterLabel
+            ? `No wallets in ${snapshotFilterLabel} hold ${options.successName}`
+            : "No holders found for this badge",
+          { id: "badge-load" }
+        );
         loadingBadgeRef.current = false;
         setLoadingBadge(false);
         return null;
@@ -654,12 +699,17 @@ export default function Home() {
       setEntryAddresses(alignEntryAddresses(loadedEntries.length, addresses));
       setEnsByAddress(loadedEnsByAddress);
       setBadgeMatchesByAddress(loadedBadgeMatches);
+      if (isSnapshotScopedLoad) {
+        setSnapshotFilterAddresses(addresses);
+      }
       setText(loadedEntries.join("\n"));
       setSelectedBadge(options.singleBadgeId);
       setActiveBadgeIds(badgeIds);
-      setActiveListName(options.activeName);
+      setActiveListName(snapshotScopedListName);
       toast.success(
-        `Loaded ${addresses.length} holders for ${options.successName}`,
+        isSnapshotScopedLoad
+          ? `Filtered ${addresses.length} snapshot wallets for ${options.successName}`
+          : `Loaded ${addresses.length} holders for ${options.successName}`,
         { id: "badge-load" }
       );
       return { entryCount: addresses.length };
@@ -675,7 +725,7 @@ export default function Home() {
       }
     }
     return null;
-  }, [badgeMap, resetWinner]);
+  }, [badgeMap, resetWinner, snapshotFilterAddresses, snapshotFilterLabel]);
 
   const loadBadgeChallenge = useCallback(
     async (badgeIds: string[], source: "Random" | "Custom") => {
@@ -762,6 +812,10 @@ export default function Home() {
       setSelectedBadge(null);
       setActiveBadgeIds([]);
       setBadgeMatchesByAddress({});
+      setSnapshotFilterAddresses(
+        data.addresses.map((address) => address.toLowerCase())
+      );
+      setSnapshotFilterLabel(periodLabel);
       setEntryAddresses(alignEntryAddresses(data.entries.length, data.addresses));
       setEnsByAddress(loadedEnsByAddress);
       setText(data.entries.join("\n"));
@@ -923,7 +977,11 @@ export default function Home() {
     setActiveBadgeIds([]);
     setBadgeMatchesByAddress({});
     setEnsByAddress({});
-    setActiveListName("Random Badge Draw");
+    setActiveListName(
+      isSnapshotFilterActive && snapshotFilterLabel
+        ? `Snapshot Badge Draw: ${snapshotFilterLabel}`
+        : "Random Badge Draw"
+    );
     setBadgeDropdownOpen(false);
     setBadgeSearch("");
     setShowLoadPanel(false);
@@ -931,7 +989,9 @@ export default function Home() {
     setEntryAddresses(alignEntryAddresses(supportedBadges.length));
     setText(supportedBadges.map((badge) => badge.name).join("\n"));
     toast.success(
-      `Loaded ${supportedBadges.length} badges onto the wheel. Spin to draw one.`
+      isSnapshotFilterActive && snapshotFilterCount > 0
+        ? `Loaded ${supportedBadges.length} badges. Spin to filter the current ${snapshotFilterCount} snapshot wallets.`
+        : `Loaded ${supportedBadges.length} badges onto the wheel. Spin to draw one.`
     );
   };
 
@@ -976,6 +1036,7 @@ export default function Home() {
     setEnsByAddress({});
     setActiveBadgeIds([]);
     setBadgeMatchesByAddress({});
+    clearSnapshotFilter();
     setActiveListName(list.name);
     setSelectedBadge(null);
     setShowLoadPanel(false);
@@ -1183,6 +1244,18 @@ export default function Home() {
                 <Download size={13} />
                 Load Snapshot Wallets
               </button>
+              {isSnapshotFilterActive && snapshotFilterLabel && (
+                <div className="mb-3 rounded-2xl border border-[#FFE048]/15 bg-[#FFE048]/5 px-3 py-2.5">
+                  <p className="text-[11px] uppercase tracking-[0.2em] text-[#FFE048]/60">
+                    Snapshot Filter Active
+                  </p>
+                  <p className="mt-1 text-xs leading-relaxed text-white/65">
+                    Badge picks and badge draws will only keep the current{" "}
+                    {snapshotFilterCount} snapshot wallets from{" "}
+                    {snapshotFilterLabel} that qualify.
+                  </p>
+                </div>
+              )}
               <div className="mb-3 rounded-2xl border border-white/[0.08] bg-black/20 p-3">
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -1244,9 +1317,9 @@ export default function Home() {
                     Badge Wheel Ready
                   </p>
                   <p className="mt-1 text-xs leading-relaxed text-white/65">
-                    Spin to draw 1 of {supportedBadges.length} eligible badges.
-                    Once it lands, that badge will be selected automatically
-                    and its holders will populate the entries.
+                    {isSnapshotFilterActive && snapshotFilterCount > 0
+                      ? `Spin to draw 1 of ${supportedBadges.length} eligible badges. Once it lands, only the current ${snapshotFilterCount} snapshot wallets that hold that badge will stay in the raffle.`
+                      : `Spin to draw 1 of ${supportedBadges.length} eligible badges. Once it lands, that badge will be selected automatically and its holders will populate the entries.`}
                   </p>
                 </div>
               )}
