@@ -491,18 +491,12 @@ export default function Home() {
 
     const nextEntries = [...entries];
     const nextAddresses = alignEntryAddresses(entries.length, entryAddresses);
-    const removedAddress = nextAddresses[winnerIdx] ?? null;
 
     nextEntries.splice(winnerIdx, 1);
     nextAddresses.splice(winnerIdx, 1);
 
     setText(nextEntries.join("\n"));
     setEntryAddresses(nextAddresses);
-    if (removedAddress && isSnapshotFilterActive) {
-      setSnapshotFilterAddresses((current) =>
-        current ? current.filter((address) => address !== removedAddress) : current
-      );
-    }
     resetWinner();
   };
 
@@ -699,9 +693,6 @@ export default function Home() {
       setEntryAddresses(alignEntryAddresses(loadedEntries.length, addresses));
       setEnsByAddress(loadedEnsByAddress);
       setBadgeMatchesByAddress(loadedBadgeMatches);
-      if (isSnapshotScopedLoad) {
-        setSnapshotFilterAddresses(addresses);
-      }
       setText(loadedEntries.join("\n"));
       setSelectedBadge(options.singleBadgeId);
       setActiveBadgeIds(badgeIds);
@@ -1250,9 +1241,10 @@ export default function Home() {
                     Snapshot Filter Active
                   </p>
                   <p className="mt-1 text-xs leading-relaxed text-white/65">
-                    Badge picks and badge draws will only keep the current{" "}
-                    {snapshotFilterCount} snapshot wallets from{" "}
-                    {snapshotFilterLabel} that qualify.
+                    Badge picks and badge draws filter from the loaded{" "}
+                    {snapshotFilterCount}-wallet snapshot base from{" "}
+                    {snapshotFilterLabel}. Multi-badge challenges keep wallets
+                    that match at least one selected badge.
                   </p>
                 </div>
               )}
